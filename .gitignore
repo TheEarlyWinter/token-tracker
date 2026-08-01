@@ -1,0 +1,11 @@
+﻿# 运行数据与本地产物
+plugin-data/
+*.zip
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.log
+node_modules/
+.DS_Store
+Thumbs.db
