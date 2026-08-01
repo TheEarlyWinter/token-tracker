@@ -9,3 +9,7 @@ plugin-data/
 node_modules/
 .DS_Store
 Thumbs.db
+
+# 界面预览图例外
+!assets/
+!assets/*.png
