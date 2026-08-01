@@ -154,8 +154,10 @@ function updateFilterOpts() {
   if(!la||!lm||!ta||!tm) return;
   ta.textContent=_selAgent?((D.agentNames||{})[_selAgent]||_selAgent):"Agent";
   if(tp){
-    if(_selProvider)tp.textContent=_pn(_selProvider);
-    else tp.textContent="供应商";
+    if(_selProvider){
+      var selProv=(_allProviders||[]).find(function(p){return p.provider===_selProvider;});
+      tp.textContent=_pn(_selProvider)+(selProv&&selProv.deleted?" (已删除)":"");
+    } else tp.textContent="供应商";
   }
   tm.textContent=_selModel||"模型";
   if(_allAgents) {
@@ -163,9 +165,16 @@ function updateFilterOpts() {
     _allAgents.forEach(function(a){if(!_showDeleted&&a.deleted)return;var n=(D.agentNames||{})[a.id]||a.id;if(a.deleted)n+=' (已删除)';h+='<div class="cs-opt'+(_selAgent===a.id?" sel":"")+'" data-v="'+a.id+'">'+n+'</div>'});
     la.innerHTML=h;
   }
-    if(sp&&lp&&D&&D.providers){
+  if(sp&&lp&&D){
     var seen={},ph='<div class="cs-opt'+(_selProvider===""?" sel":"")+'" data-v="">全部</div>';
-    D.providers.forEach(function(p){if(!seen[p.provider]){seen[p.provider]=1;ph+='<div class="cs-opt'+(_selProvider===p.provider?" sel":"")+'" data-v="'+p.provider+'">'+_pn(p.provider)+'</div>'}});
+    var providerList=_allProviders||D.providers||[];
+    providerList.forEach(function(p){
+      if(!p.provider||seen[p.provider])return;
+      seen[p.provider]=1;
+      if(!_showDeleted&&p.deleted)return;
+      var n=_pn(p.provider)+(p.deleted?" (已删除)":"");
+      ph+='<div class="cs-opt'+(_selProvider===p.provider?" sel":"")+'" data-v="'+escHTML(p.provider)+'">'+escHTML(n)+'</div>';
+    });
     lp.innerHTML=ph;
   }
   if(_allModels || D.modelOptions) {
@@ -241,7 +250,8 @@ function load(refreshFirst) {
     return r.json();
   }).then(d => {
     if (d.error) { if (el) el.textContent = d.error; return; }
-    if(!_allAgents||!D){_allAgents=d.agents.slice();_allModels=d.models.slice();_allProviders=d.providers?d.providers.slice():null}
+    if(!_allAgents||!D){_allAgents=d.agents.slice();_allModels=d.models.slice();}
+    _allProviders=d.providers?d.providers.slice():null;
     D = d; _fxRate = d._fxRate || null; if (el) el.style.display = "none";
     render();
   }).catch(e => { if (el) el.textContent = "加载失败: "+e.message; });
@@ -1449,7 +1459,16 @@ window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",func
 document.addEventListener("change",function(e){
   if(e.target.id==="sd-chk"){
     _showDeleted=e.target.checked;
-    if(D){updateFilterOpts();renderModel();renderAgent();}
+    var clearedProvider=false;
+    if(!_showDeleted&&_selProvider&&(_allProviders||[]).some(function(p){return p.provider===_selProvider&&p.deleted;})){
+      _selProvider="";
+      clearedProvider=true;
+    }
+    if(D){
+      updateFilterOpts();
+      if(clearedProvider)load();
+      else {renderModel();renderAgent();}
+    }
   }
 });
 

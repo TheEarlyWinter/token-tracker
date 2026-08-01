@@ -212,13 +212,17 @@ export default function (app, ctx) {
       try {
         const providers = [];
         const provSeen = new Set();
+        const activeProviderIds = new Set();
+        let providerStateKnown = false;
         // 1) 从 provider-catalog.json 读取文本模型供应商
         const catalogPath = path.join(HOME, "provider-catalog.json");
         if (fs.existsSync(catalogPath)) {
           try {
             const catalog = JSON.parse(fs.readFileSync(catalogPath, "utf-8"));
+            providerStateKnown = true;
             if (catalog.providers) {
               for (const [provId, provData] of Object.entries(catalog.providers)) {
+                activeProviderIds.add(provId);
                 if (provSeen.has(provId)) continue;
                 const models = [];
                 if (Array.isArray(provData.models)) {
@@ -237,10 +241,12 @@ export default function (app, ctx) {
         if (fs.existsSync(prefPath)) {
           try {
             const pref = JSON.parse(fs.readFileSync(prefPath, "utf-8"));
+            providerStateKnown = true;
             for (const cap of ["imageGeneration", "videoGeneration"]) {
               const pd = pref[cap]?.providerDefaults;
               if (!pd) continue;
               for (const [provId, provData] of Object.entries(pd)) {
+                activeProviderIds.add(provId);
                 const models = [];
                 if (provData.models) {
                   for (const mid of Object.keys(provData.models)) models.push(mid);
@@ -257,17 +263,24 @@ export default function (app, ctx) {
           } catch {}
         }
         result._providerConfig = providers;
-        // 合并 catalog/价格表中的供应商到 result.providers（前端筛选用）
+        result._providerStateKnown = providerStateKnown;
+        // 历史会话会保留已删除供应商；以当前 catalog/preferences 为权威状态标记，前端开关决定是否展示。
         if (result.providers) {
+          for (const row of result.providers) {
+            row.deleted = providerStateKnown && !activeProviderIds.has(row.provider);
+          }
           const seenProvs = new Set(result.providers.map(p => p.provider));
           for (const p of providers) {
-            if (!seenProvs.has(p.id)) { result.providers.push({ provider: p.id, model: "", totalTokens: 0, count: 0 }); seenProvs.add(p.id); }
+            if (!seenProvs.has(p.id)) { result.providers.push({ provider: p.id, model: "", totalTokens: 0, count: 0, deleted: false }); seenProvs.add(p.id); }
           }
-          // 也加上价格表中的
+          // 价格表可能保留已删除供应商，只作为历史选项存在。
           const pt3 = loadPriceTable(cache.dataDir || "");
           for (const pk of Object.keys(pt3)) {
             const pid = pk.split("/")[0];
-            if (pid && !seenProvs.has(pid)) { result.providers.push({ provider: pid, model: "", totalTokens: 0, count: 0 }); seenProvs.add(pid); }
+            if (pid && !seenProvs.has(pid)) {
+              result.providers.push({ provider: pid, model: "", totalTokens: 0, count: 0, deleted: providerStateKnown && !activeProviderIds.has(pid) });
+              seenProvs.add(pid);
+            }
           }
         }
         result._balances = [];
