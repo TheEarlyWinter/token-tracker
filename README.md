@@ -2,6 +2,18 @@
 
 HanaAgent 的 Token 消耗统计、余额查询、媒体生成统计仪表盘插件。
 
+## 界面预览
+
+> 截图已对账户金额、余额、订阅额度、时间戳等敏感信息做打码处理。
+
+仪表盘总览（模型占比、Agent 消耗对比、消费明细）：
+
+![仪表盘总览](assets/dashboard-overview.png)
+
+用量档案（时间筛选、消耗趋势、指标卡）：
+
+![用量档案](assets/usage-archive.png)
+
 ## 变更日志(v0.3.8)
 
 基于原版 v0.3.7(CACHE_VERSION=12),由 Brunhild 进行以下定制改动:
