@@ -1,8 +1,25 @@
-# Token 用量插件(token-tracker)
+<div align="center">
 
-HanaAgent 的 Token 消耗统计、余额查询、媒体生成统计仪表盘插件。
+# 📊 HanaAgent Token Tracker
 
-## 界面预览
+<p align="center">
+  <b>HanaAgent / OpenHanako 官方口径 Token 用量统计、多模型消耗占比与余额查询仪表盘插件</b>
+</p>
+
+[![HanaAgent Plugin](https://img.shields.io/badge/HanaAgent-Plugin-E879F9?style=flat-square&logo=probot&logoColor=white)](https://github.com/liliMozi/openhanako)
+[![JavaScript](https://img.shields.io/badge/Language-JavaScript-F7DF1E?style=flat-square&logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
+[![Dashboard](https://img.shields.io/badge/UI-Dashboard%20SPA-98c379?style=flat-square)]()
+
+</div>
+
+---
+
+## 📖 简介
+
+HanaAgent 的 Token 消耗统计、余额查询、媒体生成统计仪表盘插件。支持按日/周/月/年时间筛选，多模型与多 Agent 维度对比，以及对齐官方账单口径的精准计费分析。
+
+## 📸 界面预览
 
 > 截图已对账户金额、余额、订阅额度、时间戳等敏感信息做打码处理。
 
