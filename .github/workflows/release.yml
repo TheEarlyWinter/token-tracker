@@ -1,0 +1,61 @@
+name: Build & Release Plugin
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Package Plugin
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            VERSION="v1.0.0"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "ZIP_NAME=token-tracker-$VERSION.zip" >> $GITHUB_OUTPUT
+
+      - name: Create Plugin Archive
+        run: |
+          mkdir -p dist
+          zip -r "dist/${{ steps.get_version.outputs.ZIP_NAME }}" . \
+            -x "*.git*" \
+            -x "*.github*" \
+            -x "*local-accounts.json*" \
+            -x "*.local.json*" \
+            -x "*.env*" \
+            -x "*node_modules*" \
+            -x "dist/*"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.get_version.outputs.ZIP_NAME }}
+          path: dist/${{ steps.get_version.outputs.ZIP_NAME }}
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/${{ steps.get_version.outputs.ZIP_NAME }}
+          name: Release ${{ steps.get_version.outputs.VERSION }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
