@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Token 用量</title>
+  <link rel="stylesheet" href="./base.css">
+  <link rel="stylesheet" href="./theme.css">
+  <script src="./vendor/chart.umd.min.js"></script>
+</head>
+<body data-surface="page">
+  <div id="app"></div>
+  <script type="module">
+    // 通知宿主 App 准备就绪
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ source: "hana-app", type: "ready", appId: "token-tracker" }, "*");
+      }
+    } catch (e) {}
+  </script>
+  <script src="./dashboard-app.js"></script>
+</body>
+</html>

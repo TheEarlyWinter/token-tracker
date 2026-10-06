@@ -1,0 +1,339 @@
+/* ==============================
+   theme.css — macOS 色彩体系
+   ============================== */
+
+/* ── macOS 浅色 ── */
+:root, [data-theme="light"], [data-hana-theme="warm-paper"], [data-hana-theme="inherit"] {
+  --bg: #F5F5F7;
+  --bg-sidebar: #ECECEE;
+  --bg-card: #FFFFFF;
+  --bg-elevated: rgba(255,255,255,0.85);
+  --bg-grouped: #F0F0F2;
+  --card-border: rgba(0,0,0,0.06);
+  --text-primary: #1D1D1F;
+  --text-secondary: #86868B;
+  --text-tertiary: #A1A1A6;
+  --accent: #007AFF;
+  --accent-hover: #0066D6;
+  --accent-light: rgba(0,122,255,0.08);
+  --divider: rgba(0,0,0,0.08);
+  --divider-strong: rgba(0,0,0,0.12);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 30px rgba(0,0,0,0.12);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --blue: #007AFF;
+  --green: #34C759;
+  --orange: #FF9500;
+  --red: #FF3B30;
+  --purple: #5856D6;
+  --teal: #5AC8FA;
+  --pink: #FF2D55;
+  --chart-text: rgba(29,29,31,0.45);
+  --chart-grid: rgba(29,29,31,0.06);
+  --chart-bar-chat: #007AFF;
+  --chart-bar-channel: #5AC8FA;
+  --chart-doughnut-colors: #007AFF, #34C759, #FF9500, #5856D6, #FF3B30, #5AC8FA, #FF2D55, #86868B;
+  --chart-agent-colors: #007AFF, #FF9500, #34C759, #5856D6, #5AC8FA;
+  --chart-hit-rate: #34C759;
+  --chart-req-count: #007AFF;
+}
+
+/* ── macOS 深色 ── */
+[data-theme="dark"], [data-hana-theme="midnight"] {
+  --bg: #1C1C1E;
+  --bg-sidebar: #252527;
+  --bg-card: #2C2C2E;
+  --bg-elevated: rgba(44,44,46,0.85);
+  --bg-grouped: #3A3A3C;
+  --card-border: rgba(255,255,255,0.06);
+  --text-primary: #F5F5F7;
+  --text-secondary: #A1A1A6;
+  --text-tertiary: #636366;
+  --accent: #0A84FF;
+  --accent-hover: #409CFF;
+  --accent-light: rgba(10,132,255,0.1);
+  --divider: rgba(255,255,255,0.08);
+  --divider-strong: rgba(255,255,255,0.12);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
+  --shadow-lg: 0 8px 30px rgba(0,0,0,0.4);
+  --blue: #0A84FF;
+  --green: #30D158;
+  --orange: #FF9F0A;
+  --red: #FF453A;
+  --purple: #5E5CE6;
+  --teal: #64D2FF;
+  --pink: #FF375F;
+  --chart-text: rgba(245,245,247,0.45);
+  --chart-grid: rgba(245,245,247,0.06);
+  --chart-bar-chat: #0A84FF;
+  --chart-bar-channel: #64D2FF;
+  --chart-doughnut-colors: #0A84FF, #30D158, #FF9F0A, #5E5CE6, #FF453A, #64D2FF, #FF375F, #A1A1A6;
+  --chart-agent-colors: #0A84FF, #FF9F0A, #30D158, #5E5CE6, #64D2FF;
+  --chart-hit-rate: #30D158;
+  --chart-req-count: #0A84FF;
+}
+
+/* ── 护眼-暖黄 ── */
+[data-theme="护眼-暖黄"] {
+  --bg: #F5E6D3;
+  --bg-sidebar: #EEDCC6;
+  --bg-card: #FFF8F0;
+  --bg-elevated: rgba(255,248,240,0.85);
+  --bg-grouped: #F0E0CD;
+  --card-border: rgba(0,0,0,0.06);
+  --text-primary: #3E3A39;
+  --text-secondary: #7A6F6A;
+  --text-tertiary: #B0A59E;
+  --accent: #8B7355;
+  --accent-hover: #7D6648;
+  --accent-light: rgba(139,115,85,0.08);
+  --divider: rgba(0,0,0,0.08);
+  --divider-strong: rgba(0,0,0,0.12);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 30px rgba(0,0,0,0.12);
+  --blue: #8B7355;
+  --green: #7BAE7F;
+  --orange: #C9A34B;
+  --red: #D4886B;
+  --purple: #B58DB6;
+  --teal: #5BA0B0;
+  --pink: #C99AAF;
+  --chart-text: rgba(62,58,57,0.45);
+  --chart-grid: rgba(62,58,57,0.06);
+  --chart-bar-chat: #8B7355;
+  --chart-bar-channel: #C9A34B;
+  --chart-doughnut-colors: #8B7355, #C9A34B, #7BAE7F, #D4886B, #B58DB6, #5BA0B0, #C9A34B, #D4886B;
+  --chart-agent-colors: #8B7355, #C9A34B, #7BAE7F, #D4886B, #B58DB6;
+  --chart-hit-rate: #7BAE7F;
+  --chart-req-count: #8B7355;
+}
+
+/* ── 护眼-深色 ── */
+[data-theme="护眼-深色"] {
+  --bg: #2B2B2B;
+  --bg-sidebar: #333333;
+  --bg-card: #3A3A3A;
+  --bg-elevated: rgba(58,58,58,0.85);
+  --bg-grouped: #444444;
+  --card-border: rgba(255,255,255,0.06);
+  --text-primary: #A9B7C6;
+  --text-secondary: #8A949E;
+  --text-tertiary: #6A747E;
+  --accent: #7EB8DA;
+  --accent-hover: #96C8E4;
+  --accent-light: rgba(126,184,218,0.1);
+  --divider: rgba(255,255,255,0.08);
+  --divider-strong: rgba(255,255,255,0.12);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
+  --shadow-lg: 0 8px 30px rgba(0,0,0,0.4);
+  --blue: #7EB8DA;
+  --green: #8CC790;
+  --orange: #C9A36A;
+  --red: #EAB2A0;
+  --purple: #B58DB6;
+  --teal: #8BB8D0;
+  --pink: #C99AAF;
+  --chart-text: rgba(169,183,198,0.45);
+  --chart-grid: rgba(169,183,198,0.06);
+  --chart-bar-chat: #7EB8DA;
+  --chart-bar-channel: #C9A36A;
+  --chart-doughnut-colors: #7EB8DA, #C9A36A, #8CC790, #EAB2A0, #8BB8D0, #B58DB6, #C9A36A, #8BB8D0;
+  --chart-agent-colors: #7EB8DA, #C9A36A, #8CC790, #EAB2A0, #8BB8D0;
+  --chart-hit-rate: #8CC790;
+  --chart-req-count: #7EB8DA;
+}
+
+/* ── 护眼-灰阶 ── */
+[data-theme="护眼-灰阶"] {
+  --bg: #E8E8E8;
+  --bg-sidebar: #DEDEDE;
+  --bg-card: #F0F0F0;
+  --bg-elevated: rgba(240,240,240,0.85);
+  --bg-grouped: #D4D4D4;
+  --card-border: rgba(0,0,0,0.06);
+  --text-primary: #4A4A4A;
+  --text-secondary: #808080;
+  --text-tertiary: #B0B0B0;
+  --accent: #4A4A4A;
+  --accent-hover: #3A3A3A;
+  --accent-light: rgba(74,74,74,0.06);
+  --divider: rgba(0,0,0,0.08);
+  --divider-strong: rgba(0,0,0,0.12);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 30px rgba(0,0,0,0.12);
+  --blue: #4A4A4A;
+  --green: #6A6A6A;
+  --orange: #7A7A7A;
+  --red: #5A5A5A;
+  --purple: #8A8A8A;
+  --teal: #909090;
+  --pink: #7A7A7A;
+  --chart-text: rgba(74,74,74,0.45);
+  --chart-grid: rgba(74,74,74,0.06);
+  --chart-bar-chat: #4A4A4A;
+  --chart-bar-channel: #6A6A6A;
+  --chart-doughnut-colors: #4A4A4A, #6A6A6A, #7A7A7A, #8A8A8A, #5A5A5A, #909090, #707070, #858585;
+  --chart-agent-colors: #4A4A4A, #6A6A6A, #7A7A7A, #8A8A8A, #5A5A5A;
+  --chart-hit-rate: #6A6A6A;
+  --chart-req-count: #4A4A4A;
+}
+
+/* ── 护眼-绿豆 ── */
+[data-theme="护眼-绿豆"] {
+  --bg: #C7EDCC;
+  --bg-sidebar: #B8E4BD;
+  --bg-card: #D8F5DC;
+  --bg-elevated: rgba(216,245,220,0.85);
+  --bg-grouped: #A8DBAE;
+  --card-border: rgba(0,0,0,0.06);
+  --text-primary: #1A2F1D;
+  --text-secondary: #4A6B4F;
+  --text-tertiary: #8AAB8F;
+  --accent: #2E7D32;
+  --accent-hover: #256B28;
+  --accent-light: rgba(46,125,50,0.08);
+  --divider: rgba(0,0,0,0.08);
+  --divider-strong: rgba(0,0,0,0.12);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 30px rgba(0,0,0,0.12);
+  --blue: #2E7D32;
+  --green: #66BB6A;
+  --orange: #4A6B4F;
+  --red: #1A2F1D;
+  --purple: #8AAB8F;
+  --teal: #A8DBAE;
+  --pink: #A8DBAE;
+  --chart-text: rgba(26,47,29,0.45);
+  --chart-grid: rgba(26,47,29,0.06);
+  --chart-bar-chat: #2E7D32;
+  --chart-bar-channel: #4A6B4F;
+  --chart-doughnut-colors: #2E7D32, #4A6B4F, #66BB6A, #8AAB8F, #1A2F1D, #A8DBAE, #4A6B4F, #8AAB8F;
+  --chart-agent-colors: #2E7D32, #4A6B4F, #66BB6A, #8AAB8F, #1A2F1D;
+  --chart-hit-rate: #66BB6A;
+  --chart-req-count: #2E7D32;
+}
+
+/* ── 护眼-琥珀 ── */
+[data-theme="护眼-琥珀"] {
+  --bg: #1C1510;
+  --bg-sidebar: #2A2018;
+  --bg-card: #33261C;
+  --bg-elevated: rgba(51,38,28,0.85);
+  --bg-grouped: #382B20;
+  --card-border: rgba(255,255,255,0.06);
+  --text-primary: #D4B896;
+  --text-secondary: #9C8A78;
+  --text-tertiary: #6A5A4A;
+  --accent: #E8A838;
+  --accent-hover: #F0B848;
+  --accent-light: rgba(232,168,56,0.1);
+  --divider: rgba(255,255,255,0.08);
+  --divider-strong: rgba(255,255,255,0.12);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
+  --shadow-lg: 0 8px 30px rgba(0,0,0,0.4);
+  --blue: #D4B896;
+  --green: #22C55E;
+  --orange: #E8A838;
+  --red: #C97D45;
+  --purple: #A885D7;
+  --teal: #55A5A5;
+  --pink: #C86080;
+  --chart-text: rgba(212,184,150,0.45);
+  --chart-grid: rgba(212,184,150,0.06);
+  --chart-bar-chat: #D4B896;
+  --chart-bar-channel: #E8A838;
+  --chart-doughnut-colors: #D4B896, #E8A838, #22C55E, #6B9BD2, #C97D45, #A885D7, #55A5A5, #C86080;
+  --chart-agent-colors: #D4B896, #E8A838, #22C55E, #6B9BD2, #C97D45;
+  --chart-hit-rate: #22C55E;
+  --chart-req-count: #D4B896;
+}
+
+/* ── body 基础 ── */
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  transition: background 0.3s, color 0.3s;
+}
+
+/* ── 成就档案视觉系统：用量页 ── */
+:root, [data-theme="light"], [data-hana-theme="warm-paper"], [data-hana-theme="inherit"] {
+  --bg: #f3f5f3;
+  --bg-sidebar: #edf1ef;
+  --bg-card: #fbfcfb;
+  --bg-elevated: #ffffff;
+  --bg-grouped: #e8eeec;
+  --card-border: #dbe3e1;
+  --text-primary: #172326;
+  --text-secondary: #667679;
+  --text-tertiary: #93a09f;
+  --accent: #246b6e;
+  --accent-hover: #1c595c;
+  --accent-light: #e5efed;
+  --divider: #dbe3e1;
+  --divider-strong: #c9d4d1;
+  --shadow-sm: 0 1px 0 rgba(23,35,38,.03);
+  --shadow-md: 0 12px 30px rgba(23,35,38,.06);
+  --shadow-lg: 0 18px 45px rgba(23,35,38,.10);
+  --blue: #246b6e;
+  --green: #5b8c76;
+  --orange: #b66c46;
+  --red: #a45d59;
+  --purple: #77739a;
+  --teal: #5d8d8f;
+  --pink: #a47787;
+  --chart-text: rgba(23,35,38,.52);
+  --chart-grid: rgba(23,35,38,.08);
+  --chart-bar-chat: #246b6e;
+  --chart-bar-channel: #8ba9a5;
+  --chart-doughnut-colors: #246b6e, #5b8c76, #b66c46, #77739a, #a45d59, #5d8d8f, #a47787, #93a09f;
+  --chart-agent-colors: #246b6e, #b66c46, #5b8c76, #77739a, #5d8d8f;
+  --chart-hit-rate: #5b8c76;
+  --chart-req-count: #246b6e;
+}
+
+[data-theme="dark"], [data-hana-theme="midnight"] {
+  --bg: #182123;
+  --bg-sidebar: #1d292b;
+  --bg-card: #202d2f;
+  --bg-elevated: #263638;
+  --bg-grouped: #2a3a3b;
+  --card-border: #354849;
+  --text-primary: #e3ece9;
+  --text-secondary: #a2b3b0;
+  --text-tertiary: #71817f;
+  --accent: #79b5ae;
+  --accent-hover: #91c9c1;
+  --accent-light: rgba(121,181,174,.14);
+  --divider: #354849;
+  --divider-strong: #486061;
+  --shadow-sm: 0 1px 0 rgba(0,0,0,.12);
+  --shadow-md: 0 12px 30px rgba(0,0,0,.18);
+  --shadow-lg: 0 18px 45px rgba(0,0,0,.24);
+  --blue: #79b5ae;
+  --green: #86b99a;
+  --orange: #d08a61;
+  --red: #cf827c;
+  --purple: #aaa4ce;
+  --teal: #8ec4c0;
+  --pink: #c79aaa;
+  --chart-text: rgba(227,236,233,.58);
+  --chart-grid: rgba(227,236,233,.10);
+  --chart-bar-chat: #79b5ae;
+  --chart-bar-channel: #527d7b;
+  --chart-doughnut-colors: #79b5ae, #86b99a, #d08a61, #aaa4ce, #cf827c, #8ec4c0, #c79aaa, #71817f;
+  --chart-agent-colors: #79b5ae, #d08a61, #86b99a, #aaa4ce, #8ec4c0;
+  --chart-hit-rate: #86b99a;
+  --chart-req-count: #79b5ae;
+}
+
+body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }

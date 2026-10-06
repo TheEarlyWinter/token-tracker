@@ -1,6 +1,9 @@
 {
   "name": "token-tracker",
-  "version": "5.7.4",
+  "version": "6.3.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
 }
