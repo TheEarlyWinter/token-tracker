@@ -1,44 +1,30 @@
 <div align="center">
 
-# 📊 HanaAgent Token Tracker
+# HanaAgent Token Tracker
 
 <p align="center">
   <b>面向 HanaAgent (v2 App) 的官方口径 Token 消耗审计、多模型成本分析、余额监控与用量仪表盘</b>
 </p>
 
-[![HanaAgent App](https://img.shields.io/badge/HanaAgent-v2_App-E879F9?style=flat-square&logo=probot&logoColor=white)](https://github.com/liliMozi/openhanako)
-[![JavaScript](https://img.shields.io/badge/Language-JavaScript-F7DF1E?style=flat-square&logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen?style=flat-square)](test/)
-[![Architecture](https://img.shields.io/badge/Architecture-manifestVersion_2-blueviolet?style=flat-square)](manifest.json)
+[![HanaAgent App](https://img.shields.io/badge/HanaAgent-v2_App-000000?style=flat-square&logo=probot&logoColor=white)](https://github.com/liliMozi/openhanako)
+[![JavaScript](https://img.shields.io/badge/Language-JavaScript-000000?style=flat-square&logo=javascript&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
+[![License: MIT](https://img.shields.io/badge/License-MIT-000000?style=flat-square)](LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-Passing-000000?style=flat-square)](test/)
+[![Architecture](https://img.shields.io/badge/Architecture-manifestVersion_2-000000?style=flat-square)](manifest.json)
 
 </div>
 
 ---
 
-## 📖 简介
+## 简介
 
 **HanaAgent Token Tracker** 是专为 [HanaAgent (OpenHanako)](https://github.com/liliMozi/openhanako) 设计的官方标准 **v2 App**。
 
-它提供全方位的 Token 消耗统计、各模型与 Agent 维度成本分析、提示词缓存（Prompt Cache）命中率追踪、多模态任务生成统计及第三方 API 余额监控。基于标准 `@hana/app-sdk/server` 构建，告别私自扫盘与脆弱路径猜测，以合规、轻量、高确定的方式还原每一笔 Token 消耗明细。
+提供全方位的 Token 消耗统计、各模型与 Agent 维度成本分析、提示词缓存（Prompt Cache）命中率追踪、多模态任务生成统计及第三方 API 余额监控。基于标准 `@hana/app-sdk/server` 构建，告别私自扫盘与脆弱路径猜测，以合规、轻量、高确定的方式还原每一笔 Token 消耗明细。
 
 ---
 
-## 📸 界面预览
-
-> 截图已对账户金额、余额、订阅额度、时间戳等敏感信息做打码处理。
-
-仪表盘总览（模型占比、Agent 消耗对比、消费明细）：
-
-![仪表盘总览](assets/dashboard-overview.png)
-
-用量档案（时间筛选、消耗趋势、指标卡）：
-
-![用量档案](assets/usage-archive.png)
-
----
-
-## ✨ 核心特性
+## 核心特性
 
 ### 1. 全面对齐 Hana v2 App 架构规范
 - **官方标准规范**：声明 `manifestVersion: 2`，入口采用 `defineApp(async (sdk) => ...)`，使用官方标准 SDK 域方法（`sdk.usage`、`sdk.agents`、`sdk.routes` 等）；
@@ -71,7 +57,7 @@
 
 ---
 
-## 🛠️ 目录结构
+## 目录结构
 
 ```
 token-tracker/
@@ -95,7 +81,7 @@ token-tracker/
 
 ---
 
-## 📦 安装与快速上手
+## 安装与快速上手
 
 ### 方式一：在 HanaAgent 中一键安装（推荐）
 
@@ -105,8 +91,8 @@ token-tracker/
    ```
 2. 在 HanaAgent 对话框中发送：
    > 帮我安装本地路径为 `/path/to/token-tracker` 的应用
-3. 界面将弹出「Token 用量 (v6.3.0)」的安装授权卡片，点击**【确认】**；
-4. 安装完成后，左侧导航栏将直接出现 **「Token 用量」** 页面入口，点击即可畅享完整仪表盘！
+3. 界面将弹出「Token 用量 (v6.3.0)」的安装授权卡片，点击【确认】；
+4. 安装完成后，左侧导航栏将直接出现「Token 用量」页面入口，点击即可打开完整仪表盘。
 
 ### 方式二：手动安装到 Hana 应用目录
 
@@ -114,20 +100,20 @@ token-tracker/
    ```bash
    git clone https://github.com/TheEarlyWinter/token-tracker.git ~/.hanako/apps/token-tracker
    ```
-2. 打开 HanaAgent，进入 **设置** → **扩展管理** → **App** 分类；
-3. 在待批准列表中找到 **Token 用量**，点击批准并授予必要权限。
+2. 打开 HanaAgent，进入 设置 → 扩展管理 → App 分类；
+3. 在待批准列表中找到 Token 用量，点击批准并授予必要权限。
 
 ---
 
-## 🔒 权限声明与安全说明 (Capabilities)
+## 权限声明与安全说明 (Capabilities)
 
-本应用遵循**权限最小化**原则，声明并请求以下运行能力：
+本应用遵循权限最小化原则，声明并请求以下运行能力：
 
 | 权限标识 | 用途说明 | 必要性 |
 | :--- | :--- | :---: |
-| `app/usage.read` | 读取系统底层官方模型用量账本数据 | **必需** |
-| `app/agents.read` | 读取当前活跃 Agent 清单以完成用量归属映射 | **必需** |
-| `app/sessions.read` | 读取关联会话元数据以展示会话类型与明细 | **必需** |
+| `app/usage.read` | 读取系统底层官方模型用量账本数据 | 必需 |
+| `app/agents.read` | 读取当前活跃 Agent 清单以完成用量归属映射 | 必需 |
+| `app/sessions.read` | 读取关联会话元数据以展示会话类型与明细 | 必需 |
 | `app/provider.credentials.read` | 读取已配置的供应商凭据以查询余额/配额（仅内存查询，绝不外发） | 可选 |
 | `app/media.tasks.read` | 读取图片/视频等多模态生成任务明细 | 可选 |
 
@@ -135,7 +121,7 @@ token-tracker/
 
 ---
 
-## 🧪 测试与校验
+## 测试与校验
 
 在提交代码前，可通过以下命令运行完整的质量验证：
 
@@ -149,6 +135,6 @@ node ~/.hanako/skills/hana-app-creator/scripts/validate_app.mjs --dir . --json
 
 ---
 
-## 📄 许可证
+## 许可证
 
 本项目基于 [MIT License](LICENSE) 开源发布。
