@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import registerRoutes from "../routes/dashboard.js";
+import registerRoutes from "../server/dashboard.js";
 
 function createMockApp() {
   const routes = { GET: {}, POST: {} };

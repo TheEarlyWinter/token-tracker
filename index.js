@@ -57,7 +57,7 @@ export default defineApp(async (sdk) => {
   // 注册 HTTP 路由（标准 v2 路由注册机制）
   if (typeof sdk.routes?.register === "function") {
     try {
-      const { default: registerRoutes } = await import("./routes/dashboard.js");
+      const { default: registerRoutes } = await import("./server/dashboard.js");
       sdk.routes.register((app) => registerRoutes(app, sdk));
     } catch (err) {
       shared.log.warn?.("[token-tracker] route registration failed:", err.message);
