@@ -193,3 +193,53 @@ test("App registration style async bus subscription updates the host input statu
   await status.dispose();
   assert.equal(unsubscribed, 1);
 });
+
+test("input status tooltip under extreme data scales stays bounded without truncation risk", async () => {
+  const updates = [];
+  const status = new SessionCacheStatus({
+    bus: {
+      request: async () => ({
+        entries: [
+          ledgerEntry("extreme", {
+            usage: {
+              input: { totalTokens: 88888888, uncachedTokens: 8888888 },
+              output: { totalTokens: 6666666 },
+              cache: { readTokens: 80000000 },
+              totalTokens: 95555554,
+            },
+          }),
+        ],
+      }),
+    },
+    inputStatus: { set: async (value) => updates.push(value) },
+    speedQuery: () => ({ tps: 125, scope: "session", mode: "timed-stream" }),
+    firstResponseQuery: () => ({ lastMs: 1200 }),
+    log: () => {},
+  });
+
+  try {
+    await status.publish(
+      "session-extreme",
+      { read: 999999999, uncached: 123456789, output: 999999, outputReported: 1, usable: 99999, reported: 99999 },
+      true, // cacheKnown
+      { tps: 150, scope: "session" }, // sample
+      99999, // sessionCalls
+      { cache: true, speed: true },
+      1200 // firstResponseMs
+    );
+
+    const payload = updates.at(-1);
+    assert.equal(payload.visible, true);
+    assert.ok(payload.tooltip, "tooltip must be present");
+    // Host Tooltip container max-width: 18rem (~288px) with white-space: nowrap
+    // Length must be strictly <= 45 characters to guarantee no truncation.
+    assert.ok(
+      payload.tooltip.length <= 45,
+      `tooltip length (${payload.tooltip.length}) must not exceed safety limit (45 chars): ${payload.tooltip}`
+    );
+    assert.match(payload.tooltip, /命中/);
+    assert.match(payload.tooltip, /未命中/);
+  } finally {
+    await status.dispose();
+  }
+});
