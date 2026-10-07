@@ -245,8 +245,7 @@ $("app").innerHTML =
   '<div id="ld" class="ld">翻阅档案…</div>'+
   '</div>'+
   '</div>'+
-  '<div class="set-shade" id="set-shade" style="display:none"></div><div class="set-panel" id="set-panel" style="display:none"><div class="set-hdr"><span>设置</span><div style="display:flex;gap:8px;align-items:center"><button class="btn" id="set-save">保存</button><button class="btn" id="set-close">✕</button></div></div><div class="set-body"><div class="set-sec"><div class="set-sec-title">外观</div><div class="set-theme-row" id="set-theme"><button class="set-theme-opt" data-v="auto">跟随系统</button><button class="set-theme-opt" data-v="light">浅色</button><button class="set-theme-opt" data-v="dark">深色</button></div></div></div></div>'+
-  '<div id="modal" class="modal" style="display:none"><div class="modal-bg"></div><div class="modal-box"><div class="modal-hdr"><span class="modal-tit">对话详情</span><button class="btn" onclick="document.getElementById(\'modal\').style.display=\'none\'">✕</button></div><div class="modal-body" id="modal-body"></div></div></div>';
+  '<div class="set-shade" id="set-shade" style="display:none"></div><div class="set-panel" id="set-panel" style="display:none"><div class="set-hdr"><span>设置</span><div style="display:flex;gap:8px;align-items:center"><button class="btn" id="set-save">保存</button><button class="btn" id="set-close">✕</button></div></div><div class="set-body"><div class="set-sec"><div class="set-sec-title">外观</div><div class="set-theme-row" id="set-theme"><button class="set-theme-opt" data-v="auto">跟随系统</button><button class="set-theme-opt" data-v="light">浅色</button><button class="set-theme-opt" data-v="dark">深色</button></div></div></div></div>';
 
 function load(refreshFirst) {
   var sequence = ++_loadSequence;
@@ -939,55 +938,7 @@ function renderConsumption(){
   if(el){el.innerHTML=h;el.style.display="";}
 }
 
-var _CV=[];
-function renderConversations(){
-  _CV=[];
-  function mkItem(c){
-    _CV.push(c);
-    var idx=_CV.length-1;
-    var t=c.time?new Date(c.time).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Shanghai"}):"";
-    var tc=c.toolCalls&&c.toolCalls.length?'<span class="cv-tb">'+c.toolCalls.length+' 次调用</span>':'';
-    var s=c.userSnippet||"(空)";
-    var tk=fmt(c.totalTokens||0);
-    return '<div class="cv-it" data-cv="'+idx+'"><div class="cv-qt">'+s+tc+'</div><div class="cv-meta">'+(c.agentName||c.agent)+' · '+t+' · '+(c.provider?_pn(c.provider)+' / ':'')+c.model+' · '+tk+' tok</div></div>';
-  }
-  function fill(id,arr){
-    var el=$(id);if(!el)return;
-    if(!arr||!arr.length){el.innerHTML='<div class="cv-empty">此间暂无记录</div>';return;}
-    el.innerHTML=arr.map(function(c){return mkItem(c);}).join('');
-  }
-  fill("ano-list",D.abnormal);
-  fill("stream-list",D.stream);
-}
-function _showCv(idx){
-  var c=_CV[idx];if(!c)return;
-  var b=$("modal-body");if(!b)return;
-  var t=c.time?new Date(c.time).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}):"-";
-  var html='<div class="cv-dt"><div class="cv-dt-hdr">'+(c.agentName||c.agent)+' · '+t+' · '+(c.provider?_pn(c.provider)+' / ':'')+c.model+'</div>';
-  html+='<div class="cv-dt-msg cv-dt-user">'+escHTML(c.userContent||"")+'</div>';
-  if(c.steps&&c.steps.length){
-    for(var _s=0;_s<c.steps.length;_s++){
-      var st=c.steps[_s];
-      if(st.t==="th"){
-        html+='<div class="cv-step cv-step-th"><div class="cv-step-label">思考</div><div class="cv-step-cnt">'+escHTML(st.c||"")+'</div></div>';
-      }else if(st.t==="tc"){
-        html+='<div class="cv-step cv-step-tc"><div class="cv-step-label">工具调用</div><div><strong>'+escHTML(st.name||"")+'</strong><pre class="cv-step-code">'+escHTML(JSON.stringify(st.args,null,2))+'</pre></div></div>';
-      }else if(st.t==="fm"){
-        html+='<div class="cv-step cv-step-fm"><div class="cv-step-label">修改文件</div><div><strong>'+escHTML(st.name||"")+'</strong><pre class="cv-step-code">'+escHTML(JSON.stringify(st.args,null,2))+'</pre></div></div>';
-      }else if(st.t==="tx"){
-        html+='<div class="cv-step cv-step-tx"><div class="cv-step-label">回答</div><div class="cv-step-cnt">'+escHTML(st.c||"")+'</div></div>';
-      }
-    }
-  }else if(c.toolCalls&&c.toolCalls.length){
-    for(var _j=0;_j<c.toolCalls.length;_j++){
-      var tc=c.toolCalls[_j];
-      html+='<div class="cv-step cv-step-tc"><div class="cv-step-label">工具调用</div><div><strong>'+escHTML(tc.name||"")+'</strong><pre class="cv-step-code">'+escHTML(JSON.stringify(tc.args,null,2))+'</pre></div></div>';
-    }
-  }
-  html+='<div class="cv-dt-sum">总消耗 '+fmt(c.totalTokens||0)+' tokens · '+(c.msgCount||0)+' 条消息</div></div>';
-  b.innerHTML=html;
-  var m=$("modal");if(m)m.style.display="";
-}
+
 function escHTML(s){if(!s)return'';return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 
 $("rf").onclick = refresh;
@@ -1124,8 +1075,6 @@ document.querySelectorAll(".fb").forEach(b => {
 })();
 
 (function(){document.addEventListener("click",function(e){
-  var it=e.target.closest(".cv-it");if(it){_showCv(parseInt(it.dataset.cv));}
-  var mb=e.target.closest(".modal-bg");if(mb){var m=$("modal");if(m)m.style.display="none";}
   if(e.target.id==="uh"){
     var u=$("uh");if(!u)return;
     var t=u.getBoundingClientRect();
