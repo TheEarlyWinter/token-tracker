@@ -52,7 +52,10 @@ test("Manifest V2 合规性与权限最小化校验", () => {
   assert.equal(manifest.contributes.cards.length, 1);
   const card = manifest.contributes.cards[0];
   assert.equal(card.id, "token-tracker-dashboard");
-  assert.equal(card.route, "/index.html", "route 必须以 / 开头");
+  assert.equal(card.route, `/dashboard-v${manifest.version}.html`, "主卡使用当前版本入口，避免继续定位旧页面");
+  const cardHtml = fs.readFileSync(path.join(rootDir, 'ui', card.route), 'utf8');
+  assert.equal(cardHtml, fs.readFileSync(path.join(rootDir, 'ui/index.html'), 'utf8'), "兼容入口与主卡入口使用相同启动流程");
+  assert.ok(cardHtml.includes(`data-ui-version="${manifest.version}"`));
   assert.equal(card.realization, "page", "realization 必须为 page");
   assert.equal(card.siteNavEntry, true, "siteNavEntry 必须为 true");
   assert.equal(card.closable, false, "closable 必须为 false");

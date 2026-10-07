@@ -4,6 +4,7 @@ import https from "node:https";
 import crypto from "node:crypto";
 import vm from "node:vm";
 import { trackerStatus } from "../lib/runtime-health.mjs";
+const UI_VERSION = JSON.parse(fs.readFileSync(new URL('../manifest.json', import.meta.url), 'utf8')).version;
 
 // OpenCode Go 官方定价表（opencode.ai/docs/go 校验）
 const DEFAULT_PRICE_TABLE = {
@@ -567,10 +568,10 @@ export default function (app, ctx) {
 <link rel="stylesheet" href="/api/apps/token-tracker/ui/theme.css">
 <script src="/api/apps/token-tracker/ui/vendor/chart.umd.min.js"></script>
 </head>
-<body data-hana-theme="${esc(th)}" data-surface="page">
-<div id="app"></div>
+<body data-hana-theme="${esc(th)}" data-surface="page" data-ui-version="${esc(UI_VERSION)}">
+<div id="app">正在加载 Token 用量看板…</div>
 <script src="/api/apps/token-tracker/ui/model-filter-options.js"></script>
-<script type="module" src="/api/apps/token-tracker/ui/dashboard-app.js"></script>
+<script type="module" src="/api/apps/token-tracker/ui/bootstrap.js"></script>
 </body>
 </html>`);
   };
@@ -643,9 +644,27 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
   if (filterAgent) sessions = sessions.filter((s) => s.agent === filterAgent);
   if (filterProvider) sessions = sessions.filter((s) => s.providers && Object.keys(s.providers).some((pk) => pk.startsWith(filterProvider + "/")));
   if (filterType) sessions = sessions.filter((s) => s.type === filterType);
-  if (from) {
+  if (from || to) {
     const orig = dateFilter;
-    dateFilter = (d) => d >= from && (!to || d <= to) && (!orig || orig(d));
+    dateFilter = (d) => (!from || d >= from) && (!to || d <= to) && (!orig || orig(d));
+  }
+
+  // Daily and hourly buckets carry the same model/provider dimensions.
+  // Select their intersection once, without falling back to unfiltered totals.
+  function selectedModels(bucket) {
+    if (!filterProvider) return Object.entries(bucket.models || {}).filter(([model]) => !filterModel || model === filterModel);
+    const prefix = filterProvider + "/";
+    return Object.entries(bucket.providerTotals || {})
+      .filter(([key]) => key.startsWith(prefix) && (!filterModel || key === prefix + filterModel))
+      .map(([key, stats]) => [key.slice(prefix.length), stats]);
+  }
+  function selectedStats(bucket) {
+    if (!filterModel && !filterProvider) return bucket;
+    const result = { input: 0, output: 0, cacheRead: 0, totalTokens: 0, assistantCount: 0 };
+    for (const [, stats] of selectedModels(bucket)) {
+      for (const key of Object.keys(result)) result[key] += stats[key] || 0;
+    }
+    return result;
   }
 
   const sessionPool = sessions;
@@ -674,30 +693,9 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
     const a = s.agent;
     for (const [day, d] of Object.entries(s.dailyBreakdown || {})) {
       if (dateFilter && !dateFilter(day)) continue;
-      let di = 0, dout = 0, dcr = 0, dtot = 0, dasst = 0;
-
-      if (filterProvider && filterModel) {
-        const provPk = filterProvider + "/" + filterModel;
-        const pt = d.providerTotals?.[provPk];
-        if (pt) {
-          dtot = pt.totalTokens; di = pt.input; dout = pt.output; dcr = pt.cacheRead; dasst = pt.assistantCount || 0;
-        }
-      } else if (filterProvider && !filterModel) {
-        if (d.providerTotals) {
-          for (const [pk, pt] of Object.entries(d.providerTotals)) {
-            if (pk.startsWith(filterProvider + "/")) {
-              dtot += pt.totalTokens; di += pt.input; dout += pt.output; dcr += pt.cacheRead; dasst += pt.assistantCount || 0;
-            }
-          }
-        }
-      } else if (filterModel) {
-        if (d.models?.[filterModel]) {
-          const md = d.models[filterModel];
-          di = md.input || 0; dout = md.output || 0; dcr = md.cacheRead || 0; dtot = md.totalTokens || 0; dasst = md.assistantCount || 0;
-        }
-      } else {
-        di = d.input || 0; dout = d.output || 0; dcr = d.cacheRead || 0; dtot = d.totalTokens || 0; dasst = d.assistantCount || 0;
-      }
+      const stats = selectedStats(d);
+      const di = stats.input || 0, dout = stats.output || 0, dcr = stats.cacheRead || 0;
+      const dtot = stats.totalTokens || 0, dasst = stats.assistantCount || 0;
 
       if (!agentMap[a]) {
         agentMap[a] = {
@@ -736,8 +734,7 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
       else sums.totalChannel += dtot;
 
       // 聚合 model
-      for (const [mName, mData] of Object.entries(d.models || {})) {
-        if (filterModel && mName !== filterModel) continue;
+      for (const [mName, mData] of selectedModels(d)) {
         if (!modelMap[mName]) modelMap[mName] = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, assistantCount: 0 };
         modelMap[mName].input += mData.input || 0;
         modelMap[mName].output += mData.output || 0;
@@ -770,21 +767,24 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
     ...d,
   })).sort((a, b) => a.date.localeCompare(b.date));
 
-  // 小时细分 (今日)
+  // Single-day views use the selected day; other views expose today's hours.
+  const hourlyDay = from && from === to ? from : cnTodayStr;
   const hourlyMap = {};
   for (let h = 0; h < 24; h++) {
     const hs = String(h).padStart(2, "0");
     hourlyMap[hs] = { hour: hs, totalTokens: 0, desktop: 0, channel: 0, bridge: 0, background: 0, sub: 0, ledger: 0, cacheRead: 0, assistantCount: 0 };
   }
   for (const s of sessions) {
-    const todayHours = s.hourlyBreakdown?.[cnTodayStr];
+    if (dateFilter && !dateFilter(hourlyDay)) continue;
+    const todayHours = s.hourlyBreakdown?.[hourlyDay];
     if (!todayHours) continue;
     for (const [hs, hd] of Object.entries(todayHours)) {
       if (!hourlyMap[hs]) continue;
-      const t = hd.totalTokens || 0;
+      const stats = selectedStats(hd);
+      const t = stats.totalTokens || 0;
       hourlyMap[hs].totalTokens += t;
-      hourlyMap[hs].cacheRead += hd.cacheRead || 0;
-      hourlyMap[hs].assistantCount += hd.assistantCount || 0;
+      hourlyMap[hs].cacheRead += stats.cacheRead || 0;
+      hourlyMap[hs].assistantCount += stats.assistantCount || 0;
       if (s.type === "desktop") hourlyMap[hs].desktop += t;
       else if (s.type === "bridge") hourlyMap[hs].bridge += t;
       else if (s.type === "background") hourlyMap[hs].background += t;

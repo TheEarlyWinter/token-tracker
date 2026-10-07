@@ -49,3 +49,14 @@ test('model ranking renders real calls and collapses an entirely unpriced cost c
  assert.match(list.innerHTML,/23 次/);assert.doesNotMatch(list.innerHTML,/无数据/);
  assert.match(list.innerHTML,/费用占比暂不可用/);assert.doesNotMatch(list.innerHTML,/mr-col-title[^>]*>费用</);
 });
+test('a stale UI version is visible and diagnostic preview identifies both versions',()=>{
+ const {ctx}=env({});
+ const nodes=Object.fromEntries(['health-summary','runtime-health','lu','health-details','coverage-help','diagnostic-text'].map(id=>[id,{textContent:'',innerHTML:'',classList:{toggle(){}}}]));
+ ctx.document.body={dataset:{uiVersion:'6.4.10'}};
+ Object.assign(ctx,{$:id=>nodes[id],_status:{pluginVersion:'6.4.11',hostVersion:'未知',components:[],metrics:{},freshness:{intervalMs:60000}},_viewError:false});
+ for(const name of ['localTime','diagnosticText','renderStatus'])vm.runInContext(extract(name),ctx);
+ vm.runInContext('renderStatus()',ctx);
+ assert.match(nodes['health-summary'].textContent,/界面版本已过期/);
+ assert.match(nodes['diagnostic-text'].textContent,/插件版本：6.4.11/);
+ assert.match(nodes['diagnostic-text'].textContent,/界面版本：6.4.10/);
+});

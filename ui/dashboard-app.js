@@ -289,6 +289,7 @@ function diagnosticText(status) {
   if(!status) return "尚未取得诊断信息。";
   var f=status.freshness||{};
   var lines=["Token Tracker 诊断摘要", "插件版本："+status.pluginVersion, "宿主版本："+status.hostVersion,
+    "界面版本："+(document.body.dataset.uiVersion||"未知"),
     "最后尝试同步："+localTime(f.lastAttemptAt), "最后成功同步："+localTime(f.lastSuccessAt), "扫描间隔："+f.intervalMs/1000+" 秒"];
   (status.components||[]).forEach(function(c){lines.push(c.label+"："+c.state+" / "+c.code+" / "+localTime(c.at));});
   Object.keys(status.metrics||{}).forEach(function(id){lines.push((id==="speed"?"速度":"首响")+"："+status.metrics[id].code);});
@@ -300,12 +301,15 @@ function renderStatus() {
   var f=st.freshness||{}, components=st.components||[];
   var degraded=components.some(function(c){return c.state==="degraded";}) || Object.values(st.metrics||{}).some(function(m){return !["ok","pending","no_sample"].includes(m.code);});
   var unknown=components.some(function(c){return c.state==="unknown";});
+  var uiVersion=document.body.dataset.uiVersion;
+  var versionMismatch=uiVersion && uiVersion!==st.pluginVersion;
   $("health-summary").textContent="运行状态 · "+(degraded?"部分能力异常或降级":unknown?"部分能力尚未取得检查结果":"正常");
+  if(versionMismatch) $("health-summary").textContent="运行状态 · 界面版本已过期，请重新打开卡片";
   var freshness=f.syncFailed?(f.dataAvailable?"同步失败，当前展示上次成功数据":"首次同步失败，尚无可用数据"):f.scanning?"正在同步":f.stale?"数据已超过两个扫描间隔，等待同步":f.lastSuccessAt?"最后成功同步："+localTime(f.lastSuccessAt):"等待首次同步";
   if(_viewError && D) freshness="看板加载失败，当前保留上次展示的数据";
   $("lu").textContent=freshness;
-  $("runtime-health").classList.toggle("degraded",degraded||f.syncFailed||f.stale||_viewError);
-  var html='<p>最后尝试同步：'+escHTML(localTime(f.lastAttemptAt))+'<br>最后成功同步：'+escHTML(localTime(f.lastSuccessAt))+'<br>扫描间隔：'+f.intervalMs/1000+' 秒</p>';
+  $("runtime-health").classList.toggle("degraded",degraded||f.syncFailed||f.stale||_viewError||versionMismatch);
+  var html='<p>插件版本：'+escHTML(st.pluginVersion)+' · 界面版本：'+escHTML(uiVersion||"未知")+'<br>最后尝试同步：'+escHTML(localTime(f.lastAttemptAt))+'<br>最后成功同步：'+escHTML(localTime(f.lastSuccessAt))+'<br>扫描间隔：'+f.intervalMs/1000+' 秒</p>';
   components.forEach(function(c){
     html+='<div class="health-row"><strong>'+escHTML(c.label)+' · '+({ok:"正常",degraded:"异常/降级",unknown:"未知/检查中"}[c.state]||"未知")+'</strong><span>'+escHTML(c.reason)+' '+escHTML(c.suggestion)+'</span><small>'+escHTML(localTime(c.at))+'</small></div>';
   });
