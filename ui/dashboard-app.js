@@ -1,4 +1,14 @@
 // dashboard-app.js — Token 用量仪表盘 (Apple Minimalist)
+import {
+  getThemeMode,
+  setThemeMode,
+  syncThemeUI,
+  syncHanaTheme,
+  toggleTheme,
+} from "./modules/theme.js";
+import { initDatePicker } from "./modules/date-picker.js";
+import { initSettingsDialog } from "./modules/settings-dialog.js";
+
 (function(){
 "use strict";
 
@@ -71,52 +81,6 @@ function dualByCur(v, cur) {
 }
 
 function cnToday(){return new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Shanghai"})}
-
-var _THEME_KEY = "tt-theme";
-function getThemeMode() {
-  try { return localStorage.getItem(_THEME_KEY) || "auto"; } catch(e) { return "auto"; }
-}
-function setThemeMode(m) {
-  try { localStorage.setItem(_THEME_KEY, m); } catch(e) {}
-}
-var _ICON_SUN = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
-var _ICON_MOON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
-function syncThemeUI(theme, mode) {
-  var b = $("th-btn");
-  if (b) {
-    var dark = theme === "dark";
-    b.title = dark ? "切换浅色模式" : "切换深色模式";
-    b.innerHTML = dark ? _ICON_SUN : _ICON_MOON;
-  }
-  var opts = document.querySelectorAll(".set-theme-opt");
-  for (var i = 0; i < opts.length; i++) {
-    opts[i].classList.toggle("on", opts[i].dataset.v === mode);
-  }
-}
-function syncHanaTheme() {
-  var mode = getThemeMode();
-  var theme;
-  if (mode === "light") theme = "light";
-  else if (mode === "dark") theme = "dark";
-  else {
-    var ht = document.body.getAttribute("data-hana-theme") || "warm-paper";
-    if (ht === "midnight") theme = "dark";
-    else if (ht === "warm-paper") theme = "light";
-    else if (ht === "inherit" || ht === "system") {
-      theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    } else {
-      theme = "light";
-    }
-  }
-  document.body.setAttribute("data-theme", theme);
-  syncThemeUI(theme, mode);
-}
-function toggleTheme() {
-  var cur = document.body.getAttribute("data-theme") === "dark" ? "dark" : "light";
-  setThemeMode(cur === "dark" ? "light" : "dark");
-  syncHanaTheme();
-  if (D) render();
-}
 
 function chartColors() {
   const s = getComputedStyle(document.body);
@@ -942,35 +906,9 @@ function renderConsumption(){
 function escHTML(s){if(!s)return'';return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 
 $("rf").onclick = refresh;
-(function(){
-  var btn=$("st-btn"),panel=$("set-panel"),shade=$("set-shade"),close=$("set-close"),save=$("set-save");
-  function openSet(){
-    _dispCur = getDispCur();
-    syncThemeUI(document.body.getAttribute("data-theme")==="dark"?"dark":"light", getThemeMode());
-    if(shade)shade.style.display="";
-    if(panel)panel.style.display="";
-  }
-  function closeSet(){
-    if(shade)shade.style.display="none";
-    if(panel)panel.style.display="none";
-  }
-  function saveSettings(){
-    closeSet();
-  }
-  if(btn)btn.onclick=openSet;
-  if(close)close.onclick=closeSet;
-  if(shade)shade.onclick=closeSet;
-  if(save)save.onclick=saveSettings;
-
-  document.addEventListener("click",function(e){
-    var topt=e.target.closest(".set-theme-opt");
-    if(topt){
-      setThemeMode(topt.dataset.v || "auto");
-      syncHanaTheme();
-      if(D)render();
-    }
-  });
-})();
+var thBtn = $("th-btn");
+if (thBtn) thBtn.onclick = function() { toggleTheme({ onThemeChange: function() { if (D) render(); } }); };
+initSettingsDialog({ onThemeChange: function() { if (D) render(); } });
 document.querySelectorAll(".fb").forEach(b => {
   b.onclick = function() { R = this.dataset.r; document.querySelectorAll(".fb").forEach(x => x.classList.toggle("act", x.dataset.r === R)); _selAgent=""; _selModel=""; _selProvider=""; syncDateInputs(); load(); };
 });
@@ -1008,71 +946,15 @@ document.querySelectorAll(".fb").forEach(b => {
   });
 })();
 
-(function(){
-  var cal=document.createElement("div");
-  cal.className="cal";
-  document.body.appendChild(cal);
-  var curInp=null, curY=0, curM=0;
-  var today=new Date();
-  var tY=today.getFullYear(),tM=today.getMonth(),tD=today.getDate();
-
-  function build(y,m){
-    var d=new Date(y,m,1);
-    var start=d.getDay();
-    var days=new Date(y,m+1,0).getDate();
-    var h='<div class="cal-hd"><button data-a="prev">◀</button><span>'+y+'年'+(m+1)+'月</span><button data-a="next">▶</button></div>';
-    h+='<div class="cal-grid"><div class="wk">日</div><div class="wk">一</div><div class="wk">二</div><div class="wk">三</div><div class="wk">四</div><div class="wk">五</div><div class="wk">六</div>';
-    for(var i=0;i<start;i++) h+='<div class="dim"></div>';
-    for(var d=1;d<=days;d++){
-      var cls=(y===tY&&m===tM&&d===tD)?' class="today"':'';
-      h+='<div'+cls+' data-d="'+d+'">'+d+'</div>';
-    }
-    h+='</div>';
-    cal.innerHTML=h;
-    cal.querySelector('[data-a=prev]').onclick=function(e){e.stopPropagation();curM--;if(curM<0){curM=11;curY--;}build(curY,curM);};
-    cal.querySelector('[data-a=next]').onclick=function(e){e.stopPropagation();curM++;if(curM>11){curM=0;curY++;}build(curY,curM);};
-    cal.querySelectorAll('[data-d]').forEach(function(el){
-      el.onclick=function(e){
-        e.stopPropagation();
-        var dd=String(this.dataset.d).padStart(2,'0');
-        var mm=String(curM+1).padStart(2,'0');
-        curInp.value=curY+'-'+mm+'-'+dd;
-        var df=$("df"),dt=$("dt");
-        if(df&&dt&&df.value&&dt.value){
-          if(df.value>dt.value){var t=df.value;df.value=dt.value;dt.value=t;}
-          cal.classList.remove('on');curInp=null;
-          document.querySelectorAll(".fb").forEach(function(x){x.classList.toggle("act",false)});
-          R=""; load();
-          return;
-        }
-        cal.classList.remove('on');
-        curInp=null;
-      };
-    });
+initDatePicker({
+  fromInputId: "df",
+  toInputId: "dt",
+  onDateSelect: function() {
+    document.querySelectorAll(".fb").forEach(function(x){ x.classList.toggle("act", false); });
+    R = "";
+    load();
   }
-
-  function show(inp){
-    curInp=inp;
-    var v=inp.value||'';
-    var p=v.match(/^(\d{4})-(\d{2})/);
-    curY=p?parseInt(p[1]):tY; curM=p?parseInt(p[2])-1:tM;
-    build(curY,curM);
-    var r=inp.getBoundingClientRect();
-    cal.style.top=(r.bottom+8)+'px';
-    cal.style.left=r.left+'px';
-    cal.classList.add('on');
-  }
-
-  document.addEventListener('click',function(e){
-    if(cal.classList.contains('on')&&!cal.contains(e.target)&&e.target!==curInp) cal.classList.remove('on');
-  });
-
-  setTimeout(function(){
-    var df=$("df"),dt=$("dt");
-    if(df)df.addEventListener("click",function(e){e.stopPropagation();show(this);});
-    if(dt)dt.addEventListener("click",function(e){e.stopPropagation();show(this);});
-  },200);
-})();
+});
 
 (function(){document.addEventListener("click",function(e){
   if(e.target.id==="uh"){
