@@ -12,13 +12,13 @@ export function renderHeadlineCards(container, summary = {}, fmt = (n) => String
   const cacheHitRate = (summary.cacheHitRate || 0) + "%";
 
   container.innerHTML =
-    '<div class="cd cd-total"><div class="cl">总消耗</div><div class="cv">' + totalTokens + '</div></div>' +
-    '<div class="cd cd-chat"><div class="cl">聊天</div><div class="cv">' + totalDesktop + '</div></div>' +
-    '<div class="cd cd-channel"><div class="cl">频道</div><div class="cv">' + totalChannel + '</div></div>' +
-    '<div class="cd cd-output"><div class="cl">输出</div><div class="cv">' + totalOutput + '</div></div>' +
-    '<div class="cd cd-input"><div class="cl">输入(未命中)</div><div class="cv">' + totalInput + '</div></div>' +
-    '<div class="cd cd-cache"><div class="cl">输入(命中)</div><div class="cv">' + totalCacheRead + '</div></div>' +
-    '<div class="cd cd-hitrate"><div class="cl">缓存命中率</div><div class="cv">' + cacheHitRate + '</div></div>';
+    '<div class="cd cd-total"><div class="cl"><span>总消耗</span><span class="cd-tag">ALL</span></div><div class="cv">' + totalTokens + '</div></div>' +
+    '<div class="cd cd-chat"><div class="cl"><span>聊天</span><span class="cd-tag">DESK</span></div><div class="cv">' + totalDesktop + '</div></div>' +
+    '<div class="cd cd-channel"><div class="cl"><span>频道</span><span class="cd-tag">CHAN</span></div><div class="cv">' + totalChannel + '</div></div>' +
+    '<div class="cd cd-output"><div class="cl"><span>输出</span><span class="cd-tag">OUT</span></div><div class="cv">' + totalOutput + '</div></div>' +
+    '<div class="cd cd-input"><div class="cl"><span>输入(未命中)</span><span class="cd-tag">MISS</span></div><div class="cv">' + totalInput + '</div></div>' +
+    '<div class="cd cd-cache"><div class="cl"><span>输入(命中)</span><span class="cd-tag">HIT</span></div><div class="cv">' + totalCacheRead + '</div></div>' +
+    '<div class="cd cd-hitrate"><div class="cl"><span>缓存命中率</span><span class="cd-tag">RATE</span></div><div class="cv">' + cacheHitRate + '</div></div>';
 
   const items = container.children;
   for (let i = 0; i < items.length; i++) {

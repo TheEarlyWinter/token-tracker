@@ -394,20 +394,20 @@ function renderTrend() {
       }
     }
     var datasets=[];
-    if(inp)datasets.push({label:"输入",data:inp,backgroundColor:cc.doughnut[0],borderRadius:4,borderSkipped:false,barPercentage:0.7,categoryPercentage:0.8});
-    if(rsn)datasets.push({label:"推理",data:rsn,backgroundColor:cc.doughnut[4],borderRadius:4,borderSkipped:false,barPercentage:0.7,categoryPercentage:0.8});
-    if(out)datasets.push({label:"输出",data:out,backgroundColor:cc.hitRate,borderRadius:4,borderSkipped:false,barPercentage:0.7,categoryPercentage:0.8});
-    datasets.push({label:"缓存命中",data:cache,backgroundColor:cc.channel,borderRadius:4,borderSkipped:false,barPercentage:0.7,categoryPercentage:0.8});
-    tc = new Chart($("tc"),{type:"bar",data:{labels,datasets:datasets},options:{responsive:true,maintainAspectRatio:false,color:cc.text,plugins:{legend:{position:"top",align:"start",labels:{color:cc.text,boxWidth:12,boxHeight:12,font:{size:13,weight:'500'},padding:20,usePointStyle:true,pointStyle:"rectRounded"}}},scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:12}}},y:{stacked:true,grid:{color:cc.grid},ticks:{callback:function(v){return fmtAxis(v)},font:{size:12}}}}}});
+    if(inp)datasets.push({label:"输入",data:inp,backgroundColor:cc.doughnut[0],borderRadius:6,borderSkipped:false,barPercentage:0.65,categoryPercentage:0.75});
+    if(rsn)datasets.push({label:"推理",data:rsn,backgroundColor:cc.doughnut[4],borderRadius:6,borderSkipped:false,barPercentage:0.65,categoryPercentage:0.75});
+    if(out)datasets.push({label:"输出",data:out,backgroundColor:cc.hitRate,borderRadius:6,borderSkipped:false,barPercentage:0.65,categoryPercentage:0.75});
+    datasets.push({label:"缓存命中",data:cache,backgroundColor:cc.channel,borderRadius:6,borderSkipped:false,barPercentage:0.65,categoryPercentage:0.75});
+    tc = new Chart($("tc"),{type:"bar",data:{labels,datasets:datasets},options:{responsive:true,maintainAspectRatio:false,color:cc.text,plugins:{legend:{position:"top",align:"start",labels:{color:cc.text,boxWidth:8,boxHeight:8,font:{size:12,weight:'500'},padding:16,usePointStyle:true,pointStyle:"circle"}},tooltip:{backgroundColor:"rgba(24,24,27,0.92)",titleFont:{size:12,weight:'600'},bodyFont:{size:12},padding:10,cornerRadius:8,boxPadding:4,usePointStyle:true}},scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:12}}},y:{stacked:true,grid:{color:cc.grid},ticks:{callback:function(v){return fmtAxis(v)},font:{size:12}}}}}});
     return;
   }
 
   const desk = data.map(d => d.desktop||0);
   const chan = data.map(d => d.channel||0);
   tc = new Chart($("tc"),{type:"bar",data:{labels,datasets:[
-    {label:"聊天",data:desk,backgroundColor:cc.chat,borderRadius:4,borderSkipped:false,barPercentage:0.7,categoryPercentage:0.8},
-    {label:"频道",data:chan,backgroundColor:cc.channel,borderRadius:4,borderSkipped:false,barPercentage:0.7,categoryPercentage:0.8}
-  ]},options:{responsive:true,maintainAspectRatio:false,color:cc.text,plugins:{legend:{position:"top",align:"start",labels:{color:cc.text,boxWidth:12,boxHeight:12,font:{size:13,weight:'500'},padding:20,usePointStyle:true,pointStyle:"rectRounded"}}},scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:12}}},y:{stacked:true,grid:{color:cc.grid},ticks:{callback:function(v){return fmtAxis(v)},font:{size:12}}}}}});
+    {label:"聊天",data:desk,backgroundColor:cc.chat,borderRadius:6,borderSkipped:false,barPercentage:0.65,categoryPercentage:0.75},
+    {label:"频道",data:chan,backgroundColor:cc.channel,borderRadius:6,borderSkipped:false,barPercentage:0.65,categoryPercentage:0.75}
+  ]},options:{responsive:true,maintainAspectRatio:false,color:cc.text,plugins:{legend:{position:"top",align:"start",labels:{color:cc.text,boxWidth:8,boxHeight:8,font:{size:12,weight:'500'},padding:16,usePointStyle:true,pointStyle:"circle"}},tooltip:{backgroundColor:"rgba(24,24,27,0.92)",titleFont:{size:12,weight:'600'},bodyFont:{size:12},padding:10,cornerRadius:8,boxPadding:4,usePointStyle:true}},scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:12}}},y:{stacked:true,grid:{color:cc.grid},ticks:{callback:function(v){return fmtAxis(v)},font:{size:12}}}}}});
 }
 
 function renderModel() {
@@ -507,11 +507,11 @@ function renderAgent() {
     var mods=Object.entries(ag.models).sort(function(a,b){return(b[1].totalTokens||0)-(a[1].totalTokens||0)});
     if(!mods.length)return;
     $("ac").parentElement.querySelector(".ct").textContent="模型占比";
-    ac = new Chart($("ac"),{type:"bar",data:{labels:mods.map(function(m){return m[0]}),datasets:[{label:"消耗",data:mods.map(function(m){return m[1].totalTokens||0}),backgroundColor:cc.doughnut.slice(0,mods.length),borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,color:cc.text,indexAxis:"y",scales:{x:{grid:{color:cc.grid},ticks:{callback:function(v){return fmtAxis(v)},font:{size:12}}},y:{grid:{display:false},ticks:{font:{size:12}}}},plugins:{legend:{display:false}}}});
+    ac = new Chart($("ac"),{type:"bar",data:{labels:mods.map(function(m){return m[0]}),datasets:[{label:"消耗",data:mods.map(function(m){return m[1].totalTokens||0}),backgroundColor:cc.doughnut.slice(0,mods.length),borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,color:cc.text,indexAxis:"y",scales:{x:{grid:{color:cc.grid},ticks:{callback:function(v){return fmtAxis(v)},font:{size:12}}},y:{grid:{display:false},ticks:{font:{size:12}}}},plugins:{legend:{display:false},tooltip:{backgroundColor:"rgba(24,24,27,0.92)",titleFont:{size:12,weight:'600'},bodyFont:{size:12},padding:10,cornerRadius:8,boxPadding:4}}}});
   } else {
     var ags=!D.agents?null:D.agents; if(!ags||!ags.length)return;
     $("ac").parentElement.querySelector(".ct").textContent="Agent 消耗对比";
-    ac = new Chart($("ac"),{type:"bar",data:{labels:ags.map(function(a){var n=(D.agentNames||{})[a.id]||a.id;if(a.deleted)n+='（历史 Agent）';return n}),datasets:[{label:"消耗",data:ags.map(function(a){return a.totalTokens}),backgroundColor:cc.agent.slice(0,ags.length),borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,color:cc.text,indexAxis:"y",scales:{x:{grid:{color:cc.grid},ticks:{callback:function(v){return fmtAxis(v)},font:{size:12}}},y:{grid:{display:false},ticks:{font:{size:12}}}},plugins:{legend:{display:false}}}});
+    ac = new Chart($("ac"),{type:"bar",data:{labels:ags.map(function(a){var n=(D.agentNames||{})[a.id]||a.id;if(a.deleted)n+='（历史 Agent）';return n}),datasets:[{label:"消耗",data:ags.map(function(a){return a.totalTokens}),backgroundColor:cc.agent.slice(0,ags.length),borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,color:cc.text,indexAxis:"y",scales:{x:{grid:{color:cc.grid},ticks:{callback:function(v){return fmtAxis(v)},font:{size:12}}},y:{grid:{display:false},ticks:{font:{size:12}}}},plugins:{legend:{display:false},tooltip:{backgroundColor:"rgba(24,24,27,0.92)",titleFont:{size:12,weight:'600'},bodyFont:{size:12},padding:10,cornerRadius:8,boxPadding:4}}}});
   }
 }
 
