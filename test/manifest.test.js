@@ -27,6 +27,7 @@ test("Manifest V2 合规性与权限最小化校验", () => {
     "app/runtime.execute",
     "app/runtime.network",
     "app/input.status",
+    "app/ui.clipboard-write",
     "app/hooks.provider-before-request",
     "app/hooks.observe",
     "app/hooks.messages-post-assistant",

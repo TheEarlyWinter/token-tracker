@@ -27,7 +27,7 @@ function trackerFetch(endpoint, options) {
 }
 
 var _status = null, _viewError = false, _loadSequence = 0, _statusTimer = null, _closed = false;
-var D, R = "today", tc, mc, ac, _allAgents = null, _allModels = null, _allProviders = null, _selAgent = "", _selModel = "", _selProvider = "", _selType = "", _selBalance = "deepseek", _showDeleted = false, _provNames = null, _modelProv = "", _provRowHtml = "", _fxRate = null, _dispCur = "CNY";
+var D, R = "today", tc, mc, ac, _allAgents = null, _allModels = null, _allProviders = null, _selAgent = "", _selModel = "", _selProvider = "", _selType = "", _selBalance = "deepseek", _provNames = null, _modelProv = "", _provRowHtml = "", _fxRate = null, _dispCur = "CNY";
 (function(){ try{_provNames=JSON.parse(localStorage.getItem("tt-prov-names")||"{}");}catch(e){_provNames={};} })();
 
 function $(id) { return document.getElementById(id); }
@@ -164,6 +164,9 @@ function syncDateInputs() {
   }
 }
 
+function modelLabel(id) {
+  return id==="unknown"?"未标注模型":id+(D.modelStates?.[id]==="historical"?"（历史，当前未配置）":"");
+}
 function updateFilterOpts() {
   var sa=$("sa"),sp=$("sp"),sm=$("sm"); if(!sa||!sm) return;
   var la=sa.querySelector(".cs-list"),lp=sp?.querySelector(".cs-list"),lm=sm.querySelector(".cs-list");
@@ -173,23 +176,22 @@ function updateFilterOpts() {
   if(tp){
     if(_selProvider){
       var selProv=(_allProviders||[]).find(function(p){return p.provider===_selProvider;});
-      tp.textContent=_pn(_selProvider)+(selProv&&selProv.deleted?" (已删除)":"");
+      tp.textContent=_pn(_selProvider)+(selProv&&selProv.state==="historical"?"（历史配置）":"");
     } else tp.textContent="供应商";
   }
-  tm.textContent=_selModel||"模型";
+  tm.textContent=_selModel?modelLabel(_selModel):"模型";
   if(_allAgents) {
     var h='<div class="cs-opt'+(_selAgent===""?" sel":"")+'" data-v="">全部 Agent</div>';
-    _allAgents.forEach(function(a){if(!_showDeleted&&a.deleted)return;var n=(D.agentNames||{})[a.id]||a.id;if(a.deleted)n+=' (已删除)';h+='<div class="cs-opt'+(_selAgent===a.id?" sel":"")+'" data-v="'+a.id+'">'+n+'</div>'});
+    _allAgents.forEach(function(a){var n=(D.agentNames||{})[a.id]||a.id;if(a.deleted)n+='（历史 Agent）';h+='<div class="cs-opt'+(_selAgent===a.id?" sel":"")+'" data-v="'+a.id+'">'+n+'</div>'});
     la.innerHTML=h;
   }
   if(sp&&lp&&D){
     var seen={},ph='<div class="cs-opt'+(_selProvider===""?" sel":"")+'" data-v="">全部</div>';
-    var providerList=_allProviders||D.providers||[];
+    var providerList=_allProviders||D.providerOptions||D.providers||[];
     providerList.forEach(function(p){
       if(!p.provider||seen[p.provider])return;
       seen[p.provider]=1;
-      if(!_showDeleted&&p.deleted)return;
-      var n=_pn(p.provider)+(p.deleted?" (已删除)":"");
+      var n=_pn(p.provider)+(p.state==="historical"?"（历史配置）":"");
       ph+='<div class="cs-opt'+(_selProvider===p.provider?" sel":"")+'" data-v="'+escHTML(p.provider)+'">'+escHTML(n)+'</div>';
     });
     lp.innerHTML=ph;
@@ -225,7 +227,6 @@ $("app").innerHTML =
   '<span class="cs" id="sp"><span class="cs-txt">供应商</span><span class="cs-arw">▾</span><div class="cs-list"></div></span>'+
   '<span class="cs" id="sm"><span class="cs-txt">模型</span><span class="cs-arw">▾</span><div class="cs-list"></div></span>'+
   '<span class="cs" id="stype"><span class="cs-txt">类型</span><span class="cs-arw">▾</span><div class="cs-list"><div class="cs-opt sel" data-v="">全部</div><div class="cs-opt" data-v="desktop">聊天</div><div class="cs-opt" data-v="channel">频道</div></div></span>'+
-  '<div class="sd-toggle"><label class="tg"><input type="checkbox" id="sd-chk"><span class="tg-slider"></span><span class="tg-label">显示已删除</span></label></div>'+
   '</div>'+
   '<div class="sidebar-divider"></div>'+
   '<div class="sidebar-section sidebar-balance">'+
@@ -267,7 +268,7 @@ function load(refreshFirst) {
     if(d._status) _status=d._status;
     if(!r.ok || d.error) throw Error("数据暂不可用");
     if(!_allAgents||!D){_allAgents=d.agents.slice();_allModels=d.models.slice();}
-    _allProviders=d.providers?d.providers.slice():null;
+    _allProviders=(d.providerOptions||d.providers||[]).slice();
     D = d; _viewError=false; _fxRate = d._fxRate > 0 ? d._fxRate : null;
     if (el) el.style.display = "none";
     syncCurBtn();
@@ -636,24 +637,25 @@ function renderModel() {
     $("mc").parentNode.appendChild(listEl);
   }
   function emptyRank() {
-    listEl.innerHTML='<div class="rank-note">当前筛选范围尚无用量记录。</div>';
+    listEl.innerHTML='<div class="rank-note">当前筛选范围暂无可展示的模型 Token 用量。</div>'+(unattributed?'<div class="rank-note">另有 '+unattributed+' 次调用未标注模型，已包含于总览。</div>':'');
     $("mc").style.display="none";
   }
   var smv=$("sm")?_selModel:"";
   var items = [];
   _provRowHtml = "";
   var title = "模型占比";
+  var unattributed=(D.models||[]).filter(function(m){return m.id==="unknown"&&!(m.totalTokens>0);}).reduce(function(n,m){return n+(m.assistantCount||0);},0);
   if (smv && !_selAgent) {
-    var ag=!D.agents?null:D.agents.filter(function(a){return _showDeleted||!a.deleted;}); if(!ag||!ag.length){emptyRank();return;}
+    var ag=!D.agents?null:D.agents; if(!ag||!ag.length){emptyRank();return;}
     title = "Agent 占比";
-    items = ag.map(function(a,i){var n=(D.agentNames||{})[a.id]||a.id;if(a.deleted)n+=' (已删除)';return{label:n,tokens:a.totalTokens,count:a.assistantCount||0,cost:0,color:cc.agent[i%cc.agent.length]};});
+    items = ag.map(function(a,i){var n=(D.agentNames||{})[a.id]||a.id;if(a.deleted)n+='（历史 Agent）';return{label:n,tokens:a.totalTokens,count:a.assistantCount||0,cost:0,color:cc.agent[i%cc.agent.length]};});
   } else if (D.providerBreakdown && D.providerBreakdown.length) {
     // 供应商选择分类（卡内筛选，仅影响模型占比视图）
     var provs=[], seenP={};
     for(var pi=0;pi<D.providerBreakdown.length;pi++){var pp=D.providerBreakdown[pi].provider;if(!seenP[pp]){seenP[pp]=1;provs.push(pp);}}
     if(_modelProv && !seenP[_modelProv]) _modelProv="";
     var pbd = _modelProv ? D.providerBreakdown.filter(function(p){return p.provider===_modelProv;}) : D.providerBreakdown;
-    var pLabels = pbd.map(function(p){return p.model;});
+    var pLabels = pbd.map(function(p){return modelLabel(p.model);});
     var costMap={}, countMap={};
     // 1) opencode-go 官方费用/次数优先（真实计费数据，仅 opencode 有官方账单）
     if(D._subscriptionQuotas){for(var oi=0;oi<D._subscriptionQuotas.length;oi++){var ogq=D._subscriptionQuotas[oi];if(ogq&&ogq.modelSummary){for(var oj=0;oj<ogq.modelSummary.length;oj++){var msm=ogq.modelSummary[oj];if(msm&&msm.model){costMap[msm.model]=(msm.costUsd||0);countMap[msm.model]=(msm.count||0);}}}}}
@@ -668,10 +670,10 @@ function renderModel() {
     provRow+='</div>';
     _provRowHtml=provRow;
   } else {
-    var m=D.models; if(!m||!m.length){emptyRank();return;}
+    var m=(D.models||[]).filter(function(md){return md.id!=="unknown"||md.totalTokens>0;}); if(!m.length){emptyRank();return;}
     items = m.map(function(md,i){
       var cost=(D._modelCosts||[]).find(function(c){return c.model===md.id;});
-      return{label:md.id,tokens:md.totalTokens||0,count:md.assistantCount||0,cost:cost?toUsd(cost.cost,cost.currency):0,color:cc.doughnut[i%cc.doughnut.length]};
+      return{label:modelLabel(md.id),tokens:md.totalTokens||0,count:md.assistantCount||0,cost:cost?toUsd(cost.cost,cost.currency):0,color:cc.doughnut[i%cc.doughnut.length]};
     });
   }
   var ctEl=$("mc").parentElement.querySelector(".ct");
@@ -706,6 +708,7 @@ function renderModel() {
   html+='</div>';
   if(colCost.empty)html+='<div class="rank-note">费用占比暂不可用：尚无可用定价或换算数据。</div>';
   if(colCount.empty)html+='<div class="rank-note">当前范围暂无调用次数记录。</div>';
+  if(unattributed)html+='<div class="rank-note">另有 '+unattributed+' 次调用未标注模型，已包含于总览，不作为已配置模型展示。</div>';
   listEl.innerHTML=html;
   $("mc").style.display="none";
   listEl.style.display="block";
@@ -730,9 +733,9 @@ function renderAgent() {
     $("ac").parentElement.querySelector(".ct").textContent="模型占比";
     ac = new Chart($("ac"),{type:"bar",data:{labels:mods.map(function(m){return m[0]}),datasets:[{label:"消耗",data:mods.map(function(m){return m[1].totalTokens||0}),backgroundColor:cc.doughnut.slice(0,mods.length),borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,color:cc.text,indexAxis:"y",scales:{x:{grid:{color:cc.grid},ticks:{callback:function(v){return fmtAxis(v)},font:{size:12}}},y:{grid:{display:false},ticks:{font:{size:12}}}},plugins:{legend:{display:false}}}});
   } else {
-    var ags=!D.agents?null:D.agents.filter(function(a){return _showDeleted||!a.deleted;}); if(!ags||!ags.length)return;
+    var ags=!D.agents?null:D.agents; if(!ags||!ags.length)return;
     $("ac").parentElement.querySelector(".ct").textContent="Agent 消耗对比";
-    ac = new Chart($("ac"),{type:"bar",data:{labels:ags.map(function(a){var n=(D.agentNames||{})[a.id]||a.id;if(a.deleted)n+=' (已删除)';return n}),datasets:[{label:"消耗",data:ags.map(function(a){return a.totalTokens}),backgroundColor:cc.agent.slice(0,ags.length),borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,color:cc.text,indexAxis:"y",scales:{x:{grid:{color:cc.grid},ticks:{callback:function(v){return fmtAxis(v)},font:{size:12}}},y:{grid:{display:false},ticks:{font:{size:12}}}},plugins:{legend:{display:false}}}});
+    ac = new Chart($("ac"),{type:"bar",data:{labels:ags.map(function(a){var n=(D.agentNames||{})[a.id]||a.id;if(a.deleted)n+='（历史 Agent）';return n}),datasets:[{label:"消耗",data:ags.map(function(a){return a.totalTokens}),backgroundColor:cc.agent.slice(0,ags.length),borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,color:cc.text,indexAxis:"y",scales:{x:{grid:{color:cc.grid},ticks:{callback:function(v){return fmtAxis(v)},font:{size:12}}},y:{grid:{display:false},ticks:{font:{size:12}}}},plugins:{legend:{display:false}}}});
   }
 }
 
@@ -1011,7 +1014,8 @@ function renderConsumption(){
     var c=costs[i];
     if(!((c.totalTokens || modelInfo[c.model]?.totalTokens || 0)>0) && !(c.callCount>0) && !(c.cost>0))continue;
     var curM=c.currency||"USD";
-    var label=c.model;
+    if(c.model==="unknown" && !(c.totalTokens>0) && !(c.cost>0))continue;
+    var label=modelLabel(c.model);
     var isSlot=false, split=null;
     for(var sj3=0;sj3<slotModels.length;sj3++){if(slotModels[sj3].key.split('/').pop()===c.model){isSlot=true;split=slotSplit(c.model,slotModels[sj3].entry);break;}}
     if(isSlot&&split){
@@ -1534,22 +1538,6 @@ window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",func
   var ht=document.body.getAttribute("data-hana-theme")||"warm-paper";
   if(ht==="inherit"||ht==="system"){syncHanaTheme();if(D)render();}
 });
-document.addEventListener("change",function(e){
-  if(e.target.id==="sd-chk"){
-    _showDeleted=e.target.checked;
-    var clearedProvider=false;
-    if(!_showDeleted&&_selProvider&&(_allProviders||[]).some(function(p){return p.provider===_selProvider&&p.deleted;})){
-      _selProvider="";
-      clearedProvider=true;
-    }
-    if(D){
-      updateFilterOpts();
-      if(clearedProvider)load();
-      else {renderModel();renderAgent();}
-    }
-  }
-});
-
 // ── 订阅余量自动刷新：轻量拉取，只更新余量仪表，不重建图表（后端 5 分钟缓存天然节流） ──
 function refreshQuota() {
   if (!D) return;
@@ -1576,8 +1564,10 @@ document.addEventListener("visibilitychange", function(){
 
 $("copy-diagnostic").onclick=async function(){
   var text=$("diagnostic-text").textContent;
-  try { await navigator.clipboard.writeText(text); $("copy-result").textContent="已复制"; }
-  catch { $("copy-result").textContent="无法访问剪贴板，请选择上方摘要手动复制。"; }
+  try {
+    var result=await window.TokenTrackerCopyDiagnostic(text);
+    $("copy-result").textContent=result.ok?"已复制":result.reason==="permission_denied"?"未获剪贴板写入授权，请在插件权限入口授权。":"复制不可用，请选择上方摘要手动复制。";
+  } catch { $("copy-result").textContent="复制不可用，请选择上方摘要手动复制。"; }
 };
 window.addEventListener("pagehide",function(){_closed=true;clearTimeout(_statusTimer);clearInterval(quotaTimer);});
 syncDateInputs();

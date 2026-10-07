@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import '../ui/model-filter-options.js';
 const source = fs.readFileSync(new URL('../ui/dashboard-app.js', import.meta.url), 'utf8');
 function extract(name) {
   const start = source.indexOf('function ' + name + '(');
@@ -13,7 +14,7 @@ function extract(name) {
 function env(data) {
   const elements = {'cs-section': {style:{}, innerHTML:''}};
   const ctx = vm.createContext({D:data,_fxRate:null,_dispCur:'CNY',document:{getElementById:id=>elements[id]},console});
-  for(const name of ['$', 'fmt', 'fmtAxis', 'cny', 'dual', 'toUsd', 'dualByCur', 'escHTML', 'renderConsumption']) vm.runInContext(extract(name),ctx);
+  for(const name of ['$', 'fmt', 'fmtAxis', 'cny', 'dual', 'toUsd', 'dualByCur', 'escHTML', 'modelLabel', 'renderConsumption']) vm.runInContext(extract(name),ctx);
   return {ctx,elements};
 }
 test('USD rows and totals fall back to USD with no exchange rate, including zero', () => {
@@ -59,4 +60,17 @@ test('a stale UI version is visible and diagnostic preview identifies both versi
  assert.match(nodes['health-summary'].textContent,/界面版本已过期/);
  assert.match(nodes['diagnostic-text'].textContent,/插件版本：6.4.11/);
  assert.match(nodes['diagnostic-text'].textContent,/界面版本：6.4.10/);
+});
+test('supplier dropdown uses stable catalog and models use current configuration rather than archived IDs',()=>{
+ const {ctx}=env({agentNames:{},providerOptions:[{provider:'live',state:'current'},{provider:'past',state:'historical'}],modelOptions:['active'],modelStates:{'qwen3.8-flash':'historical',unknown:'unattributed'}});
+ const widgets=Object.fromEntries(['sa','sp','sm'].map(id=>[id,{list:{innerHTML:''},text:{textContent:''},querySelector(selector){return selector==='.cs-list'?this.list:this.text}}]));
+ Object.assign(ctx,{$:id=>widgets[id],_selAgent:'',_selProvider:'',_selModel:'',_allAgents:[],_allProviders:ctx.D.providerOptions,_allModels:[{id:'qwen3.8-flash'},{id:'unknown'}],_pn:id=>id,window:{TokenTrackerModelOptions:globalThis.TokenTrackerModelOptions}});
+ vm.runInContext(extract('updateFilterOpts'),ctx);vm.runInContext('updateFilterOpts()',ctx);
+ assert.match(widgets.sp.list.innerHTML,/data-v="live"/);assert.match(widgets.sp.list.innerHTML,/data-v="past"/);assert.match(widgets.sp.list.innerHTML,/历史配置/);
+ assert.match(widgets.sm.list.innerHTML,/active/);assert.doesNotMatch(widgets.sm.list.innerHTML,/qwen3.8-flash|unknown/);
+});
+test('historical token detail remains visible with an explicit label and zero-token unknown is not a model row',()=>{
+ const {ctx,elements}=env({_modelCosts:[{model:'qwen3.8-flash',totalTokens:200000000,cost:0,priced:false},{model:'unknown',totalTokens:0,cost:0,priced:false,callCount:6}],models:[{id:'qwen3.8-flash',totalTokens:200000000,input:200000000},{id:'unknown',totalTokens:0,assistantCount:6}],modelStates:{'qwen3.8-flash':'historical',unknown:'unattributed'}});
+ vm.runInContext('renderConsumption()',ctx);
+ assert.match(elements['cs-section'].innerHTML,/历史，当前未配置/);assert.match(elements['cs-section'].innerHTML,/200,000,000/);assert.doesNotMatch(elements['cs-section'].innerHTML,/unknown/);
 });

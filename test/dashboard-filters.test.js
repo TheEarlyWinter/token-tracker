@@ -47,6 +47,10 @@ test('hourly trend, daily trend, model detail and overview use the same filter i
       assert.equal(sum(rows,'cacheRead'),calls*2,JSON.stringify(filters));
     }
     assert.equal(sum(d.hourly,'desktop')+sum(d.hourly,'channel'),tokens);
+    assert.equal(sum(d.providers,'totalTokens'),tokens);
+    assert.equal(sum(d.providers,'count'),calls);
+    assert.ok(d.providerOptions.some(p=>p.provider==='p1'));
+    assert.ok(d.providerOptions.some(p=>p.provider==='p2'));
   }
   const historical=build(snapshot,'all',{from:'2020-01-02',to:'2020-01-02',model:'shared'});
   assert.equal(historical.hourly.reduce((s,h)=>s+h.totalTokens,0),110);

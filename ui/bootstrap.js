@@ -1,4 +1,5 @@
 import { hana } from './assets/sdk.js';
+import { copyDiagnostic } from './diagnostic-clipboard.js';
 
 export async function startDashboard({ targetWindow = window, sdk = hana, load = () => import('./dashboard-app.js') } = {}) {
   try {
@@ -7,6 +8,7 @@ export async function startDashboard({ targetWindow = window, sdk = hana, load =
       targetWindow.hana ||= sdk;
       targetWindow.hana.ready();
     }
+    targetWindow.TokenTrackerCopyDiagnostic = text => copyDiagnostic(text, {sdk:targetWindow.hana,browserClipboard:targetWindow.navigator?.clipboard});
     await load();
     return true;
   } catch {

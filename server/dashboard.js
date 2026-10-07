@@ -4,6 +4,7 @@ import https from "node:https";
 import crypto from "node:crypto";
 import vm from "node:vm";
 import { trackerStatus } from "../lib/runtime-health.mjs";
+import { applyDashboardOptions } from "../lib/dashboard-options.mjs";
 const UI_VERSION = JSON.parse(fs.readFileSync(new URL('../manifest.json', import.meta.url), 'utf8')).version;
 
 // OpenCode Go 官方定价表（opencode.ai/docs/go 校验）
@@ -214,7 +215,6 @@ export default function (app, ctx) {
 
       // 获取当前活跃 Providers (通过官方公开 bus: model:list)
       const providers = [];
-      const activeProviderIds = new Set();
       let providerStateKnown = false;
       try {
         const modelRes = typeof ctx.models?.listAvailable === "function"
@@ -225,7 +225,6 @@ export default function (app, ctx) {
           for (const m of modelRes.models) {
             const pId = m.provider || (m.id && m.id.split("/")[0]) || "unknown";
             const mId = m.modelId || m.id || "unknown";
-            activeProviderIds.add(pId);
             let pItem = providers.find(p => p.id === pId);
             if (!pItem) {
               pItem = { id: pId, models: [] };
@@ -239,18 +238,7 @@ export default function (app, ctx) {
       result._providerConfig = providers;
       result._providerStateKnown = providerStateKnown;
 
-      if (result.providers) {
-        for (const row of result.providers) {
-          row.deleted = providerStateKnown && !activeProviderIds.has(row.provider);
-        }
-        const seenProvs = new Set(result.providers.map(p => p.provider));
-        for (const p of providers) {
-          if (!seenProvs.has(p.id)) {
-            result.providers.push({ provider: p.id, model: "", totalTokens: 0, count: 0, deleted: false });
-            seenProvs.add(p.id);
-          }
-        }
-      }
+      applyDashboardOptions(result, providers, providerStateKnown);
 
       // 查询余额与凭据 (通过 ctx.bus.request("provider:credentials", { providerId }))
       result._balances = [];
@@ -675,6 +663,7 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
   const agentMap = {};
   const modelMap = {};
   const dailyMap = {};
+  const providerMap = Object.create(null);
   const sums = {
     totalInput: 0,
     totalOutput: 0,
@@ -733,6 +722,16 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
       else if (s.type === "ledger") sums.totalLedger += dtot;
       else sums.totalChannel += dtot;
 
+      for (const [key, stats] of Object.entries(d.providerTotals || {})) {
+        const slash = key.indexOf('/');
+        if (slash < 1) continue;
+        const provider = key.slice(0, slash), model = key.slice(slash + 1);
+        if (filterProvider && provider !== filterProvider || filterModel && model !== filterModel) continue;
+        const row = providerMap[provider] ||= { provider, totalTokens: 0, count: 0 };
+        row.totalTokens += stats.totalTokens || 0;
+        row.count += stats.assistantCount || 0;
+      }
+
       // 聚合 model
       for (const [mName, mData] of selectedModels(d)) {
         if (!modelMap[mName]) modelMap[mName] = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, assistantCount: 0 };
@@ -760,6 +759,7 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
   })).sort((a, b) => b.totalTokens - a.totalTokens);
 
   const modelOptions = Array.from(new Set(sessionPool.flatMap((s) => Object.keys(s.models || {})))).sort();
+  const providerOptions = [...new Set(Object.values(cache.sessions || {}).flatMap(s => Object.values(s.providers || {}).map(p => p.provider)).filter(Boolean))].map(provider => ({provider}));
 
   // 日期趋势
   const daily = Object.entries(dailyMap).map(([date, d]) => ({
@@ -819,6 +819,8 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
     agents,
     models,
     modelOptions,
+    providers: Object.values(providerMap).sort((a,b)=>b.totalTokens-a.totalTokens),
+    providerOptions,
     daily,
     hourly,
     prediction: buildPredictionResponse(cache, daily),
