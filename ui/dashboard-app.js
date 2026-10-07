@@ -10,6 +10,11 @@ import { initDatePicker } from "./modules/date-picker.js";
 import { initSettingsDialog } from "./modules/settings-dialog.js";
 import { renderHeadlineCards } from "./modules/headline-cards.js";
 import { initFilterDropdowns } from "./modules/filter-dropdown.js";
+import {
+  renderSubscriptionQuotas as renderSubQuotas,
+  renderHdrQuota as renderHeaderQuota,
+} from "./modules/subscription-quotas.js";
+import { renderMediaSection as renderMedia } from "./modules/media-section.js";
 
 (function(){
 "use strict";
@@ -49,16 +54,6 @@ function _pn(p) { return (_provNames && _provNames[p]) || p; }
 // 展示币种偏好（localStorage + 头部按钮切换）：USD / CNY，全页单一币种
 function getDispCur() { try { return localStorage.getItem("tt-disp-cur") || "CNY"; } catch(e) { return "CNY"; } }
 function setDispCur(v) { try { localStorage.setItem("tt-disp-cur", v); } catch(e) {} _dispCur = v; }
-function syncCurBtn() {
-  var b = $("cur-btn");
-  if (b) { b.textContent = _dispCur === "CNY" && _fxRate > 0 ? "¥" : "$"; b.title = _dispCur === "CNY" && !(_fxRate > 0) ? "汇率缺失，美元费用保留美元；点击切换币种偏好" : "切换展示币种"; }
-}
-function toggleCur() {
-  _dispCur = _dispCur === "CNY" ? "USD" : "CNY";
-  try { localStorage.setItem("tt-disp-cur", _dispCur); } catch(e) {}
-  syncCurBtn();
-  if (D) render();
-}
 // 美元→人民币（汇率来自后端 _fxRate，失败时仅显示美元）
 function cny(v) {
   if (!(v > 0) || !_fxRate) return "";
@@ -229,7 +224,6 @@ function load(refreshFirst) {
     _allProviders=(d.providerOptions||d.providers||[]).slice();
     D = d; _viewError=false; _fxRate = d._fxRate > 0 ? d._fxRate : null;
     if (el) el.style.display = "none";
-    syncCurBtn();
     render();
   }).catch(() => {
     if(sequence !== _loadSequence || _closed) return;
@@ -317,46 +311,13 @@ function render() {
 
 
 function renderMediaSection(){
-  var mg=D.mediaGen||[];
-  var el=$("media-section");
-  if(!el)return;
-  if(!mg.length){el.style.display="none";return;}
-  var imgItems=[],vidItems=[];
-  var imgTotal=0,vidTotal=0,imgCost=0,vidCost=0;
-  var costs=D._modelCosts||[];
-  for(var i=0;i<mg.length;i++){
-    var g=mg[i];
-    var key=g.provider+"/"+g.model;
-    var costEntry=null;
-    for(var k=0;k<costs.length;k++){if(costs[k].provider+"/"+costs[k].model===key){costEntry=costs[k];break;}}
-    var cost=costEntry?costEntry.cost:0;
-    var item={provider:g.provider,model:g.model,callCount:g.callCount||0,successCount:g.successCount||0,cost:cost};
-    if(g.kind==='video'){vidItems.push(item);vidTotal+=g.callCount||0;vidCost+=cost;}
-    else{imgItems.push(item);imgTotal+=g.callCount||0;imgCost+=cost;}
-  }
-  if(!imgTotal&&!vidTotal){el.style.display="none";return;}
-  el.style.display="";
-  var h='<div class="media-sec">';
-  if(imgTotal){
-    h+='<div class="media-cat"><div class="media-cat-hdr"><span class="media-cat-icon">IMAGE</span><span class="media-cat-title">图片生成</span><span class="media-cat-sum">'+imgTotal+'张'+(imgCost>0?' · '+dual(imgCost):'')+'</span></div>';
-    h+='<div class="media-cat-grid">';
-    for(var i=0;i<imgItems.length;i++){
-      var it=imgItems[i];
-      h+='<div class="media-item"><div class="media-item-model">'+escHTML(it.provider)+'/'+escHTML(it.model)+'</div><div class="media-item-stats"><span>'+it.callCount+'次</span>'+(it.successCount>0&&it.successCount!==it.callCount?'<span class="media-item-succ">成功'+it.successCount+'</span>':'')+(it.cost>0?'<span class="media-item-cost">'+dual(it.cost)+'</span>':'')+'</div></div>';
-    }
-    h+='</div></div>';
-  }
-  if(vidTotal){
-    h+='<div class="media-cat"><div class="media-cat-hdr"><span class="media-cat-icon">VIDEO</span><span class="media-cat-title">视频生成</span><span class="media-cat-sum">'+vidTotal+'个'+(vidCost>0?' · '+dual(vidCost):'')+'</span></div>';
-    h+='<div class="media-cat-grid">';
-    for(var i=0;i<vidItems.length;i++){
-      var it=vidItems[i];
-      h+='<div class="media-item"><div class="media-item-model">'+escHTML(it.provider)+'/'+escHTML(it.model)+'</div><div class="media-item-stats"><span>'+it.callCount+'次</span>'+(it.successCount>0&&it.successCount!==it.callCount?'<span class="media-item-succ">成功'+it.successCount+'</span>':'')+(it.cost>0?'<span class="media-item-cost">'+dual(it.cost)+'</span>':'')+'</div></div>';
-    }
-    h+='</div></div>';
-  }
-  h+='</div>';
-  el.innerHTML=h;
+  renderMedia({
+    container: $("media-section"),
+    mediaGen: D ? D.mediaGen : [],
+    costs: D ? D._modelCosts : [],
+    dual: dual,
+    escHTML: escHTML,
+  });
 }
 
 var _trendMode = "scene";
@@ -554,178 +515,23 @@ function renderAgent() {
   }
 }
 
-function fmtReset(sec){
-  if(!sec||sec<=0)return "即将重置";
-  if(sec<60)return sec+"秒后重置";
-  if(sec<3600)return Math.floor(sec/60)+"分后重置";
-  if(sec<86400){var h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60);return m?h+"时"+m+"分后重置":h+"时后重置";}
-  var d=Math.floor(sec/86400),h2=Math.floor((sec%86400)/3600);return h2?d+"天"+h2+"时后重置":d+"天后重置";
-}
-// cost 字段单位为 1e-8 美元，显示 6 位精度（去尾零）
-function fmtUsd(v8){
-  var d=(v8||0)/1e8;
-  if(d<=0)return "$0";
-  var s=d.toFixed(6).replace(/0+$/,"").replace(/\.$/,"");
-  return "$"+s;
-}
-// 柱顶短标签：金额大则 3 位，小则 4 位
-function fmtUsdShort(v8){
-  var d=(v8||0)/1e8;
-  if(d<=0)return "$0";
-  return d>=0.01?"$"+d.toFixed(3):"$"+d.toFixed(4);
-}
-// 美元直接量（对齐官方口径：小于 1 显示 6 位小数，其余 2 位）
-function fmtUsdDollar(v){
-  if(!(v>0))return "0";
-  if(v<1)return v.toFixed(6);
-  return v.toFixed(2);
-}
-// OpenCode Go 套餐窗口额度（官网 opencode.ai/docs/go）
-var OG_LIMITS={rolling:12,weekly:30,monthly:60};
-function quotaColor(p){
-  if(p>=80)return "var(--red)";
-  if(p>=60)return "var(--orange)";
-  return "var(--green)";
-}
 function renderSubscriptionQuotas(){
-  var el=$("sub-quota-section");
-  if(!el)return;
-  var qs=D._subscriptionQuotas||[];
-  var pt=D&&D._priceTable?D._priceTable:{};
-  var hasData=false;
-  for(var i=0;i<qs.length;i++){
-    var qt=qs[i].type||"";
-    if(qt==="opencode-go-quota"||qt==="quota"||qt==="coding-plan-quota"||qt==="error"||qt==="no-token"){hasData=true;break;}
-  }
-  if(!hasData){el.style.display="none";return;}
-  var h='<div class="subq-wrap"><div class="subq-title">订阅余量</div>';
-  for(var i=0;i<qs.length;i++){
-    var q=qs[i];
-    var label=q.label||q.provider||"";
-    var isOg=(q.type==="opencode-go-quota"||q.type==="opencode-go-quota-est");
-    var srcBadge=isOg?(q.est?'<span class="subq-src est">本地估算</span>':'<span class="subq-src">官方</span>'):'';
-    h+='<div class="subq-card"><div class="subq-hdr"><span class="subq-prov">'+escHTML(label)+'</span>'+srcBadge+'</div>';
-    if((q.type==="opencode-go-quota"||q.type==="opencode-go-quota-est")&&q.windows&&q.windows.length){
-      var winNames={rolling:"滚动 5 小时",weekly:"本周",monthly:"本月"};
-      var uh='';
-      // ── 模型月额度：官方每模型 $15/$60 配额（6x / 1.5x 乘数）vs 当月已用（usage 缓存成本）──
-      // 注意：模型额度不叠加，套餐总额上限为 $60/月（账户级 5h $12 / 周 $30 / 月 $60）
-      // 数据源固定当月口径（后端 monthlyModelUsage），不随页面筛选范围变化；为空则不显示
-      var ogUsageSrc = q.monthlyModelUsage || [];
-      if(ogUsageSrc&&ogUsageSrc.length){
-        var allowRows=[];
-        for(var oai=0;oai<ogUsageSrc.length;oai++){
-          var oms=ogUsageSrc[oai];
-          var ope=pt["opencode-go/"+oms.model]||{};
-          var allow=ope.monthlyAllowance||0;
-          if(!allow)continue;
-          var usedAmt=oms.costUsd||0;
-          var usedPct=Math.min(100,Math.max(0,usedAmt/allow*100));
-          allowRows.push({model:oms.model,allow:allow,used:usedAmt,pct:usedPct,count:oms.count||0});
-        }
-        if(allowRows.length){
-          var scopeTag=q.modelCostScope==='all-keys'?' · 全部 KEY':'';
-          uh+='<div class="og-usage"><div class="og-cost-title">模型月额度<span class="og-title-total">套餐月限 $60'+scopeTag+'</span></div>';
-          for(var oai2=0;oai2<allowRows.length;oai2++){
-            var ar=allowRows[oai2];
-            var ac=quotaColor(ar.pct);
-            uh+='<div class="og-usage-row og-mrow"><span class="og-u-model">'+escHTML(ar.model)+'</span><span class="og-u-tok">已用 $'+fmtUsdDollar(ar.used)+' / $'+ar.allow+'</span><span class="og-u-pct" style="color:'+ac+'">'+ar.pct.toFixed(1)+'%</span></div>';
-          }
-          uh+='</div>';
-        }
-      }
-      // ── Key 汇总：每个 key 单独卡片并排（自适应），内部下钻模型明细 ──
-      if(q.keySummary&&q.keySummary.length){
-        var ogCallsTmp = 0;
-        for(var kt0=0;kt0<q.keySummary.length;kt0++){ogCallsTmp+=(q.keySummary[kt0].count||0);}
-        uh+='<div class="og-usage"><div class="og-cost-title">Key 汇总<span class="og-title-total">'+fmt(ogCallsTmp)+' 次</span></div><div class="ogk-grid">';
-        var ksCalls=0;
-        for(var ki0=0;ki0<q.keySummary.length;ki0++){ksCalls+=(q.keySummary[ki0].count||0);}
-        for(var ki=0;ki<q.keySummary.length;ki++){
-          var ks=q.keySummary[ki];
-          var kname=(ks.name||ks.keyId||"");
-          var kShort=kname.split(" - ").pop();
-          if(kShort.length>22)kShort=kShort.slice(0,20)+"…";
-          var kpct=ksCalls>0?Math.round((ks.count||0)/ksCalls*100):0;
-          uh+='<div class="ogk-card"><div class="ogk-hdr"><span class="ogk-name">'+escHTML(kShort)+'</span><span class="ogk-pct">'+kpct+'%</span></div>';
-          uh+='<div class="ogk-sub">'+fmt(ks.count||0)+' 次</div>';
-          uh+='<div class="ogk-bar"><div class="ogk-bar-fill" style="width:'+kpct+'%"></div></div>';
-          // 该 key 下的模型明细（模型费用占 key 比例）
-          if(ks.models&&ks.models.length){
-            var kmTotal=0;for(var kmt=0;kmt<ks.models.length;kmt++){kmTotal+=(ks.models[kmt].count||0);}
-            uh+='<div class="ogk-models">';
-            for(var kmi=0;kmi<ks.models.length;kmi++){
-              var km=ks.models[kmi];
-              var kmpct=kmTotal>0?Math.round((km.count||0)/kmTotal*100):0;
-              uh+='<div class="og-usage-row og-mrow"><span class="og-u-model">'+escHTML(km.model)+'</span><span class="og-u-tok">'+fmt(km.count||0)+' 次</span><span class="og-u-pct">'+kmpct+'%</span></div>';
-            }
-            uh+='</div>';
-          }
-          uh+='</div>';
-        }
-        uh+='</div></div>';
-      }
-      h+=uh;
-    }else if(q.type==="quota"&&q.models&&q.models.length){
-      for(var w=0;w<q.models.length;w++){
-        var m=q.models[w];
-        var mp=(m.limit&&m.limit>0)?Math.min(100,Math.max(0,((m.used||0)/m.limit)*100)):0;
-        var mc=quotaColor(mp);
-        h+='<div class="subq-row"><div class="subq-lbl">'+escHTML(m.label||m.model||("模型"+w))+'</div>'+
-          '<div class="subq-bar"><div class="subq-bar-fill" style="width:'+mp+'%;background:'+mc+'"></div></div>'+
-          '<div class="subq-pct" style="color:'+mc+'">已用 '+mp.toFixed(0)+'%</div></div>';
-      }
-    }else if(q.type==="coding-plan-quota"&&q.windows&&q.windows.length){
-      for(var w=0;w<q.windows.length;w++){
-        var win=q.windows[w];
-        var p=Math.min(100,Math.max(0,win.usedPercent||0));
-        var c=quotaColor(p);
-        h+='<div class="subq-row"><div class="subq-lbl">'+escHTML(win.level||"窗口")+'</div>'+
-          '<div class="subq-bar"><div class="subq-bar-fill" style="width:'+p+'%;background:'+c+'"></div></div>'+
-          '<div class="subq-pct" style="color:'+c+'">已用 '+p+'%</div></div>';
-      }
-    }else if(q.type==="error"||q.type==="no-token"){
-      h+='<div class="subq-err">'+escHTML(q.display||"未配置")+'</div>';
-    }else if(q.display){
-      h+='<div class="subq-err">'+escHTML(q.display)+'</div>';
-    }
-    h+='</div>';
-  }
-  h+='</div>';
-  el.innerHTML=h;
-  el.style.display="";
-
+  renderSubQuotas({
+    container: $("sub-quota-section"),
+    quotas: D ? D._subscriptionQuotas : [],
+    priceTable: D ? D._priceTable : {},
+    escHTML: escHTML,
+    fmt: fmt,
+  });
 }
 
 function renderHdrQuota(){
-  var el=$("hdrQuota");
-  if(!el)return;
-  var qs=D._subscriptionQuotas||[];
-  var og=null;
-  for(var i=0;i<qs.length;i++){
-    if(qs[i].type==="opencode-go-quota"||qs[i].type==="opencode-go-quota-est"){og=qs[i];break;}
-  }
-  if(!og||!og.windows||!og.windows.length){el.style.display="none";return;}
-  el.style.display="";
-  var winNames={rolling:"5小时",weekly:"本周",monthly:"本月"};
-  var h='<div class="hq-title">订阅余量</div><div class="hq-wins">';
-  for(var w=0;w<og.windows.length;w++){
-    var win=og.windows[w];
-    var p;
-    if(og.est){p=win.limitUsd>0?Math.round((win.usedUsd||0)/win.limitUsd*100):0;}
-    else{p=Math.min(100,Math.max(0,win.usedPercent||0));}
-    p=Math.min(100,Math.max(0,p));
-    var remainPct=(100-p);
-    var remainPctStr=remainPct%1===0?remainPct.toFixed(0):remainPct.toFixed(2);
-    var limitUsd=og.est?(win.limitUsd||0):(OG_LIMITS[win.level]||0);
-    var remainUsd=og.est?Math.max(0,limitUsd-(win.usedUsd||0)):Math.max(0,limitUsd*(100-p)/100);
-    var c=quotaColor(p);
-    var amtCls=p>=80?" hq-urgent":(p>=60?" hq-warn":"");
-    var resetTxt=og.est?"估算":fmtReset(win.resetInSec);
-    h+='<div class="hq-win"><span class="hq-wl">'+escHTML(winNames[win.level]||win.level)+'</span><b class="'+amtCls+'" style="color:'+c+'">'+dual(remainUsd)+'</b><div class="hq-track"><i style="width:'+p+'%;background:'+c+'"></i></div><i class="hq-note">剩余 '+remainPctStr+'%<em class="hq-reset"><svg class="hq-hg" viewBox="0 0 12 16" aria-hidden="true"><path d="M2 1h8v2L6.5 8l3.5 5v2H2v-2l3.5-5L2 3V1z" fill="none" stroke="currentColor"/><path class="hg-sand-top" d="M3 2.1h6L6 7.5 3 2.1z" fill="currentColor"/><path class="hg-sand-bot" d="M6 8.5l3 5.4H3l3-5.4z" fill="currentColor" opacity=".45"/></svg>'+resetTxt+'</em></i></div>';
-  }
-  h+='</div>';
-  el.innerHTML=h;
+  renderHeaderQuota({
+    container: $("hdrQuota"),
+    quotas: D ? D._subscriptionQuotas : [],
+    escHTML: escHTML,
+    dual: dual,
+  });
 }
 
 function renderConsumption(){
@@ -828,7 +634,6 @@ initDatePicker({
 
 syncHanaTheme();
 _dispCur = getDispCur();
-syncCurBtn();
 new MutationObserver(function(ms){
   for(var i=0;i<ms.length;i++){
     if(ms[i].attributeName==="data-hana-theme"){syncHanaTheme();if(D)render();}
