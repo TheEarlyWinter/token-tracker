@@ -45,9 +45,9 @@
 
 ## 版本与加载策略
 
-版本 **6.4.17**。Tag、manifest 和 package 版本保持严格一致。
+版本 **6.5.0**。Tag、manifest 和 package 版本保持严格一致。
 
-主卡使用 `/dashboard-v6.4.17.html` 版本入口，`/index.html` 仍可使用；通过随包官方 UI SDK 握手并加载看板，启动失败时保留可见说明。运行状态详情和诊断同时显示插件版本与界面版本；不一致时提示重新打开卡片。Hana 的静态资源集随装载代次捕获，更新后应重新打开旧卡片，不用磁盘文件哈希代替已打开页面的版本验证。卡片封面 `face.image: assets/face.png` 相对 `ui/`，对应 `ui/assets/face.png`，不要求顶层 `assets/face.png`。
+主卡使用 `/dashboard-v6.5.0.html` 版本入口，`/index.html` 仍可使用；通过随包官方 UI SDK 握手并加载看板，启动失败时保留可见说明。运行状态详情和诊断同时显示插件版本与界面版本；不一致时提示重新打开卡片。Hana 的静态资源集随装载代次捕获，更新后应重新打开旧卡片，不用磁盘文件哈希代替已打开页面的版本验证。卡片封面 `face.image: assets/face.png` 相对 `ui/`，对应 `ui/assets/face.png`，不要求顶层 `assets/face.png`。
 
 看板区分最后尝试与最后成功同步；失败保留已成功取得的数据，首次失败不渲染零消耗。过期判断采用配置扫描间隔的两倍，并结合当前扫描任务状态。运行状态仅在取得注册回执、成功扫描或实际发布结果后显示正常；宿主将 Agent 启用与输入栏授权合并拒绝时，明确保留该原因的不确定性。
 
@@ -61,6 +61,9 @@
 - `index.js`：App 生命周期管理、官方 `usage:list` 拉取与事件订阅分发。
 - `lib/local-client.mjs`：启动宿主管理的 Node 服务，以短期随机凭据执行有大小限制的 RPC；扫描请求单飞，支持批量和分页。
 - `runtime/service.mjs`、`runtime/engine/`：子进程进行归档、增量聚合与缓存恢复。数据写入 App 自有 dataDir，不猜测用户会话目录、不直接扫描会话正文 JSONL。
+- `runtime/engine/services/turns-store.js`：基于原生 `node:sqlite` 的轮次（Turn-level）细粒度索引库，支持历史全量回填与未命中输入排序。
+- `runtime/engine/services/details-csv.js`：服务端高效拼装带 UTF-8 BOM 的明细 CSV 导出文本。
+- `runtime/engine/services/visual-analytics.js`：多 Agent 活跃度聚合、时序来源拆分与单轮分位数摘要计算。
 - `usage-archive.jsonl` 与缓存 journal：追加写入、去重、重启恢复；坏 JSON 行和中断尾行跳过并计数警告，空行忽略。读取权限/磁盘错误不等同于可恢复的坏 JSON。
 - `lib/session-cache.mjs`：输入栏胶囊管理。加权计算会话 Prompt Cache 命中率，调度速度与首响更新，生成紧凑安全的双行浮层。
 - `lib/first-response.mjs`：请求发出至 provider 响应元数据到达，称为**首响**，不是首 token TTFT。
@@ -72,6 +75,9 @@
 - `ui/modules/filter-dropdown.js`：Agent、供应商、模型与消息类型下拉筛选组件。
 - `ui/modules/subscription-quotas.js`：顶栏与底栏订阅额度与余量仪表组件。
 - `ui/modules/media-section.js`：多媒体（图片/视频）任务生成统计与分类展示。
+- `ui/modules/turns-inspector.js`：单轮明细排障面板（未命中排序、阈值过滤、分页、CSV 导出与本地时间自适应）。
+- `ui/modules/agent-analytics.js`：多 Agent 活跃分布热力图与用量全景河流图。
+- `ui/modules/curve.js`：纯数学三次单调样条（Fritsch–Carlson）与 Hermite 插值。
 - `ui/modules/settings-dialog.js`：外观与偏好设置面板。
 - `ui/modules/date-picker.js`：日历式自定义日期范围选择器。
 - `ui/base.css`：轻量精简的现代 macOS 风格原生样式表。

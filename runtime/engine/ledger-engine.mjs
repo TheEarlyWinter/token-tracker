@@ -1,6 +1,8 @@
+import fs from "node:fs";
 import path from "node:path";
 import { openArchiveStore } from "./services/archive-store.js";
 import { createJsonJournalStore } from "./services/json-journal-store.js";
+import { openTurnsStore } from "./services/turns-store.js";
 import { normalizeEntryForArchive } from "../../lib/ledger-normalization.mjs";
 export { normalizeEntryForArchive } from "../../lib/ledger-normalization.mjs";
 
@@ -61,6 +63,18 @@ function addRecordToBucket(bucket, record, day, hour) {
   bucket.cacheWrite += cacheWrite;
   bucket.totalTokens += total;
   bucket.cost += cost;
+
+  if (!bucket.conversations) bucket.conversations = [];
+  bucket.conversations.push({
+    time: ts,
+    provider,
+    model,
+    totalTokens: total,
+    inTokens: input,
+    outTokens: output,
+    cacheRead,
+    msgCount: 1,
+  });
 
   if (!bucket.models[model]) bucket.models[model] = { input: 0, inputUncached: 0, output: 0, cacheRead: 0, cacheWrite: 0, count: 0 };
   const modelStats = bucket.models[model];
@@ -229,9 +243,15 @@ export class LedgerEngine {
     this.cachePath = path.join(dataDir, CACHE_FILE);
     this.archiveStore = openArchiveStore(path.join(dataDir, ARCHIVE_FILE), this.log);
     this.cacheStore = createJsonJournalStore({ file: this.cachePath, log: this.log });
+    this.turnsStore = openTurnsStore({ file: path.join(dataDir, "cache.sqlite"), log: this.log });
     const cached = this.cacheStore.load();
     const meta = cached || this.cacheStore.readMeta() || {};
     this.data = { ...meta, sessions: cached?.sessions || {} };
+    if (cached?.sessions && Object.keys(cached.sessions).length > 0 && fs.existsSync(path.join(dataDir, "cache.sqlite"))) {
+      if (this.turnsStore && this.turnsStore.count() === 0) {
+        try { this.turnsStore.rebuild(cached); } catch (e) { this.log.warn?.("[token-tracker] turnsStore initial rebuild failed: " + e.message); }
+      }
+    }
     this.ready = !!cached;
     this.revision = 0;
     this.dirtyBuckets = new Set();
@@ -303,6 +323,17 @@ export class LedgerEngine {
 
     const persistence = this.cacheStore.save(cache, [...dirty], fullRebuild);
     this.cacheStore.saveMeta(cache);
+    if (this.turnsStore) {
+      try {
+        if (this.turnsStore.count() < 100 && this.archiveStore.size() > 0) {
+          this.turnsStore.backfillFromArchive(this.archiveStore.entries);
+        } else {
+          this.turnsStore.apply(cache, { all: fullRebuild, keys: [...dirty] });
+        }
+      } catch (e) {
+        this.log.warn?.("[token-tracker] turnsStore apply failed: " + e.message);
+      }
+    }
     this.data = cache;
     this.ready = true;
     this.dirtyBuckets.clear();
@@ -354,7 +385,10 @@ export class LedgerEngine {
 
   getData() { return this.data; }
   archiveCount() { return this.archiveStore.size(); }
-  close() { try { this.cacheStore.close(); } catch {} }
+  close() {
+    try { this.turnsStore?.close?.(); } catch {}
+    try { this.cacheStore.close(); } catch {}
+  }
 }
 
 export function createLedgerEngine(options) {

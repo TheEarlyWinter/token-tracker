@@ -15,6 +15,8 @@ import {
   renderHdrQuota as renderHeaderQuota,
 } from "./modules/subscription-quotas.js";
 import { renderMediaSection as renderMedia } from "./modules/media-section.js";
+import { createAgentAnalytics } from "./modules/agent-analytics.js";
+import { createTurnsInspector } from "./modules/turns-inspector.js";
 
 (function(){
 "use strict";
@@ -202,6 +204,8 @@ $("app").innerHTML =
   '<div class="chart-row"><div class="cx"><div class="ct">模型占比</div><canvas id="mc"></canvas></div>'+
   '<div class="cx"><div class="ct">Agent 消耗对比</div><canvas id="ac"></canvas></div></div>'+
   '</div></div>'+
+  '<div id="agent-analytics-section"></div>'+
+  '<div id="turns-inspector-section"></div>'+
   '<div id="sub-quota-section" style="display:none"></div>'+
   '<div id="ld" class="ld">翻阅档案…</div>'+
   '</div>'+
@@ -306,6 +310,46 @@ function render() {
   renderModel();
   renderAgent();
   renderSubscriptionQuotas();
+  renderAgentAnalyticsSection();
+  renderTurnsInspectorSection();
+}
+
+let _agentAnalyticsInstance = null;
+function renderAgentAnalyticsSection() {
+  const el = $("agent-analytics-section");
+  if (!el || !D) return;
+  if (!_agentAnalyticsInstance) {
+    _agentAnalyticsInstance = createAgentAnalytics({
+      container: el,
+      getData: () => D,
+    });
+  } else {
+    _agentAnalyticsInstance.reload();
+  }
+}
+
+let _turnsInspectorInstance = null;
+function renderTurnsInspectorSection() {
+  const el = $("turns-inspector-section");
+  if (!el || !D) return;
+  if (!_turnsInspectorInstance) {
+    _turnsInspectorInstance = createTurnsInspector({
+      container: el,
+      fetchFn: trackerFetch,
+      getApiBase: getAppApiBase,
+      getFilters: () => ({
+        range: R,
+        from: $("df") ? $("df").value : "",
+        to: $("dt") ? $("dt").value : "",
+        agent: _selAgent || "",
+        provider: _selProvider || "",
+        model: _selModel || "",
+        type: _selType || "",
+      }),
+    });
+  } else {
+    _turnsInspectorInstance.reload(true);
+  }
 }
 
 

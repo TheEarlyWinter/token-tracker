@@ -1282,3 +1282,364 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── 16. 单轮明细排障面板 (Turns Inspector) ── */
+.turns-panel {
+  margin-top: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 20px;
+}
+
+.turns-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.turns-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.turns-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.turns-summary-badge {
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-tag);
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.turns-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.turns-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.turns-filter-group select {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border-input);
+}
+
+.turns-export-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.turns-export-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.turns-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.turns-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: left;
+}
+
+.turns-table th {
+  padding: 10px 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--divider);
+  white-space: nowrap;
+}
+
+.turns-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.turns-table tr:hover td {
+  background: var(--bg-hover);
+}
+
+.col-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.col-uncached .uncached-val {
+  color: var(--orange);
+  font-weight: 600;
+}
+
+.col-uncached .sub-val {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.col-total {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.agent-tag {
+  background: var(--bg-tag);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.provider-prefix {
+  color: var(--text-tertiary);
+  margin-right: 4px;
+  font-size: 11px;
+}
+
+.hit-pill {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--green);
+  font-weight: 500;
+}
+
+.turns-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding-top: 10px;
+}
+
+.turns-pagination-info {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.turns-pagination-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.turns-pagination-actions .btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  background: var(--bg-btn);
+  color: var(--text-primary);
+  border: 1px solid var(--border-btn);
+  cursor: pointer;
+}
+
+.turns-pagination-actions .btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.turns-loading, .turns-empty {
+  padding: 30px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+/* ── 17. 多 Agent 分析与河流图面板 (Agent Analytics) ── */
+.analytics-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-top: 24px;
+}
+
+.analytics-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 20px;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.panel-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.panel-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.agent-heatmap-container {
+  overflow-x: auto;
+  padding: 8px 0;
+}
+
+.agent-heatmap-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 600px;
+}
+
+.heatmap-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.heatmap-agent-label {
+  width: 120px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.heatmap-cells {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+.heat-cell {
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--bg-hover);
+  transition: transform 0.15s;
+}
+
+.heat-cell:hover {
+  transform: scale(1.25);
+  z-index: 2;
+}
+
+.heat-cell.level-0 { background: rgba(120, 120, 120, 0.08); }
+.heat-cell.level-1 { background: rgba(79, 128, 225, 0.25); }
+.heat-cell.level-2 { background: rgba(79, 128, 225, 0.50); }
+.heat-cell.level-3 { background: rgba(79, 128, 225, 0.75); }
+.heat-cell.level-4 { background: #4f80e1; }
+
+.heatmap-total-label {
+  width: 70px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.stream-controls {
+  display: flex;
+  gap: 10px;
+}
+
+.btn-group {
+  display: flex;
+  border: 1px solid var(--border-btn);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.btn-group .btn-xs {
+  border: none;
+  border-radius: 0;
+  padding: 3px 8px;
+  font-size: 11px;
+  background: var(--bg-btn);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.btn-group .btn-xs.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.stream-chart-container {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.stream-svg {
+  width: 100%;
+  height: auto;
+  min-height: 200px;
+}
+
+.axis-text {
+  font-size: 10px;
+  fill: var(--text-tertiary);
+}
+
+.stream-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--divider);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+

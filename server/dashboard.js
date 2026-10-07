@@ -6,6 +6,9 @@ import vm from "node:vm";
 import { trackerStatus } from "../lib/runtime-health.mjs";
 import { applyDashboardOptions } from "../lib/dashboard-options.mjs";
 import { renderDashboardHtml } from "../lib/dashboard-page.mjs";
+import { openTurnsStore, queryTurns, queryTurnSizes } from "../runtime/engine/services/turns-store.js";
+import { buildDetailsCSV } from "../runtime/engine/services/details-csv.js";
+import { buildVisualAnalytics } from "../runtime/engine/services/visual-analytics.js";
 const UI_VERSION = JSON.parse(fs.readFileSync(new URL('../manifest.json', import.meta.url), 'utf8')).version;
 
 // OpenCode Go 官方定价表（opencode.ai/docs/go 校验）
@@ -544,6 +547,149 @@ export default function (app, ctx) {
     return c.json(snap);
   };
 
+  // 轮次细粒度明细查询接口
+  const handleTurns = async (c) => {
+    try {
+      const cache = ctx._tokenCache;
+      const store = cache?.turnsStore || openTurnsStore({ file: path.join(ctx.dataDir || "", "cache.sqlite") });
+      const from = c.req.query("from") || "";
+      const to = c.req.query("to") || "";
+      const agent = c.req.query("agent") || "";
+      const model = c.req.query("model") || "";
+      const provider = c.req.query("provider") || "";
+      const type = c.req.query("type") || "";
+      const minTokens = Number(c.req.query("minTokens")) || 0;
+      const sortKey = c.req.query("sortKey") || "time";
+      const order = c.req.query("order") || "desc";
+      const page = Math.max(1, Number(c.req.query("page")) || 1);
+      const pageSize = Math.min(100, Math.max(1, Number(c.req.query("pageSize")) || 50));
+
+      let res = store ? queryTurns(store, {
+        from, to, agent, model, provider, type, minTokens,
+        sortKey, order,
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
+      }) : { rows: [], total: 0, sumTokens: 0 };
+
+      // 回退兼容：若 turns 表暂无数据，从 sessions.conversations 动态回退
+      if ((!res.rows || res.rows.length === 0) && cache?.data?.sessions) {
+        const rows = [];
+        for (const [key, s] of Object.entries(cache.data.sessions)) {
+          if (agent && s.agent !== agent) continue;
+          if (type && s.type !== type) continue;
+          for (let i = 0; i < (s.conversations || []).length; i++) {
+            const cv = s.conversations[i];
+            if (model && cv.model !== model) continue;
+            if (provider && cv.provider !== provider) continue;
+            const day = cv.time ? cv.time.slice(0, 10) : "";
+            if (from && day < from) continue;
+            if (to && day > to) continue;
+            const total = Number(cv.totalTokens || 0);
+            if (minTokens && total < minTokens) continue;
+            rows.push({
+              sessionKey: key,
+              seq: i + 1,
+              at: cv.time || "",
+              day,
+              agent: s.agent || "",
+              type: s.type || "",
+              provider: cv.provider || "",
+              model: cv.model || "",
+              total,
+              input: cv.inTokens ?? cv.inputTokens ?? 0,
+              output: cv.outTokens ?? cv.outputTokens ?? 0,
+              cacheRead: cv.cacheRead ?? 0,
+              calls: cv.msgCount ?? 1,
+            });
+          }
+        }
+        const total = rows.length;
+        const sumTokens = rows.reduce((acc, r) => acc + r.total, 0);
+        if (sortKey === "tokens") rows.sort((a, b) => b.total - a.total);
+        else if (sortKey === "uncached") rows.sort((a, b) => Math.max(0, b.input - b.cacheRead) - Math.max(0, a.input - a.cacheRead));
+        else rows.sort((a, b) => b.at.localeCompare(a.at));
+        const paged = rows.slice((page - 1) * pageSize, page * pageSize);
+        res = { rows: paged, total, sumTokens };
+      }
+
+      const totalPages = Math.max(1, Math.ceil(res.total / pageSize));
+      return c.json({
+        rows: res.rows,
+        total: res.total,
+        sumTokens: res.sumTokens,
+        page,
+        pageSize,
+        totalPages,
+      });
+    } catch (err) {
+      return c.json({ error: err.message, code: "TURNS_ERROR" }, 500);
+    }
+  };
+
+  // 轮次明细 CSV 导出接口
+  const handleTurnsCsv = async (c) => {
+    try {
+      const cache = ctx._tokenCache;
+      const store = cache?.turnsStore || openTurnsStore({ file: path.join(ctx.dataDir || "", "cache.sqlite") });
+      const from = c.req.query("from") || "";
+      const to = c.req.query("to") || "";
+      const agent = c.req.query("agent") || "";
+      const model = c.req.query("model") || "";
+      const provider = c.req.query("provider") || "";
+      const type = c.req.query("type") || "";
+      const minTokens = Number(c.req.query("minTokens")) || 0;
+      const sortKey = c.req.query("sortKey") || "time";
+      const order = c.req.query("order") || "desc";
+
+      let rows = [];
+      if (store) {
+        const res = queryTurns(store, { from, to, agent, model, provider, type, minTokens, sortKey, order, all: true });
+        rows = res.rows || [];
+      }
+      if (!rows.length && cache?.data?.sessions) {
+        for (const [key, s] of Object.entries(cache.data.sessions)) {
+          if (agent && s.agent !== agent) continue;
+          if (type && s.type !== type) continue;
+          for (let i = 0; i < (s.conversations || []).length; i++) {
+            const cv = s.conversations[i];
+            if (model && cv.model !== model) continue;
+            if (provider && cv.provider !== provider) continue;
+            const day = cv.time ? cv.time.slice(0, 10) : "";
+            if (from && day < from) continue;
+            if (to && day > to) continue;
+            const total = Number(cv.totalTokens || 0);
+            if (minTokens && total < minTokens) continue;
+            rows.push({
+              sessionKey: key,
+              seq: i + 1,
+              at: cv.time || "",
+              day,
+              agent: s.agent || "",
+              type: s.type || "",
+              provider: cv.provider || "",
+              model: cv.model || "",
+              total,
+              input: cv.inTokens ?? cv.inputTokens ?? 0,
+              output: cv.outTokens ?? cv.outputTokens ?? 0,
+              cacheRead: cv.cacheRead ?? 0,
+              calls: cv.msgCount ?? 1,
+            });
+          }
+        }
+        if (sortKey === "tokens") rows.sort((a, b) => b.total - a.total);
+        else if (sortKey === "uncached") rows.sort((a, b) => Math.max(0, b.input - b.cacheRead) - Math.max(0, a.input - a.cacheRead));
+        else rows.sort((a, b) => b.at.localeCompare(a.at));
+      }
+      const csv = buildDetailsCSV(rows);
+      return c.text(csv, 200, {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="token-turns.csv"`,
+      });
+    } catch (err) {
+      return c.text("导出失败: " + err.message, 500);
+    }
+  };
+
   // 兼容直接加载 HTML 路由（统一模板渲染，解耦版本硬编码）
   const handleDashboardHtml = (c) => {
     const th = c.req.query("hana-theme") || "inherit";
@@ -560,6 +706,11 @@ export default function (app, ctx) {
   app.get("/data", handleData);
   app.get("/status", c => c.json(trackerStatus(ctx._tokenCache)));
   app.get("/dashboard/status", c => c.json(trackerStatus(ctx._tokenCache)));
+
+  app.get("/dashboard/turns", handleTurns);
+  app.get("/turns", handleTurns);
+  app.get("/dashboard/turns/csv", handleTurnsCsv);
+  app.get("/turns/csv", handleTurnsCsv);
 
   app.post("/dashboard/refresh", handleRefresh);
   app.post("/refresh", handleRefresh);
@@ -817,6 +968,7 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
     daily,
     hourly,
     prediction: buildPredictionResponse(cache, daily),
+    visualAnalytics: typeof buildVisualAnalytics === "function" ? buildVisualAnalytics(sessions, dateFilter, filters) : null,
   };
 }
 
