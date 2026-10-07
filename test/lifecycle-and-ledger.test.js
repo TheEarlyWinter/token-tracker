@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import appModule from "../index.js";
+import { createFakeRuntime } from "./helpers/fake-runtime.mjs";
 
 test("App V2 生命周期与账本拉取/归一化/归档持久化测试", async () => {
   // 创建临时隔离工作目录（充当 sdk.dataDir）
@@ -50,8 +51,10 @@ test("App V2 生命周期与账本拉取/归一化/归档持久化测试", async
     },
   ];
 
+  const fakeRuntime = createFakeRuntime();
   const mockCtx = {
     dataDir: tmpDataDir,
+    runtime: fakeRuntime.api,
     config: {
       get: async (key) => (key === "scanInterval" ? 30 : null),
     },
@@ -93,15 +96,18 @@ test("App V2 生命周期与账本拉取/归一化/归档持久化测试", async
   await shared.scan(true);
 
   // 2. 校验持久化文件
-  const archivePath = path.join(tmpDataDir, "usage-archive.json");
-  const cachePath = path.join(tmpDataDir, "token-cache.json");
-  assert.ok(fs.existsSync(archivePath), "usage-archive.json 必须落盘");
-  assert.ok(fs.existsSync(cachePath), "token-cache.json 必须落盘");
+  const archivePath = path.join(tmpDataDir, "usage-archive.jsonl");
+  const cacheJournalPath = path.join(tmpDataDir, "token-cache.json.journal");
+  const cacheMetaPath = path.join(tmpDataDir, "token-cache.json.meta");
+  assert.ok(fs.existsSync(archivePath), "usage-archive.jsonl 必须落盘");
+  assert.ok(fs.existsSync(cacheJournalPath), "缓存会话增量日志必须落盘");
+  assert.ok(fs.existsSync(cacheMetaPath), "缓存元数据必须落盘");
 
-  const archive = JSON.parse(fs.readFileSync(archivePath, "utf-8"));
+  const archiveRecords = fs.readFileSync(archivePath, "utf-8").trim().split(String.fromCharCode(10)).map(line => JSON.parse(line));
+  const archivedEntries = archiveRecords.filter(record => record.rid);
   // 只有 1 条有效请求 req-1 落入归档，过滤掉了 error 和 usage_missing
-  assert.equal(Object.keys(archive.entries).length, 1);
-  const archivedEntry = archive.entries["req-1"];
+  assert.equal(archivedEntries.length, 1);
+  const archivedEntry = archivedEntries.find(record => record.rid === "req-1").v;
   assert.equal(archivedEntry.inputUncachedTokens, 800, "必须优先记录 inputUncachedTokens");
   assert.equal(archivedEntry.inputTokens, 1000);
   assert.equal(archivedEntry.totalTokens, 1200);
@@ -127,8 +133,8 @@ test("App V2 生命周期与账本拉取/归一化/归档持久化测试", async
 
   // 5. 校验幂等 dispose
   assert.equal(typeof shared.dispose, "function");
-  shared.dispose();
-  shared.dispose(); // 重复调用不报错
+  await shared.dispose();
+  await shared.dispose(); // 重复调用不报错
 
   // 清理临时目录
   fs.rmSync(tmpDataDir, { recursive: true, force: true });

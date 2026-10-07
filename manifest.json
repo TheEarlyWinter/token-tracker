@@ -2,19 +2,34 @@
   "manifestVersion": 2,
   "id": "token-tracker",
   "name": "Token 用量",
-  "version": "6.3.0",
-  "minAppVersion": "0.978.0",
+  "version": "6.4.7",
+  "minAppVersion": "0.1050.9",
   "description": "展示所有 Agent 的 Token 消耗统计，支持按时间、Agent、模型筛选和下钻。",
   "entry": "index.js",
   "icon": "assets/icon.png",
   "capabilities": [
     "app/usage.read",
+    "app/runtime.execute",
+    "app/runtime.network",
+    "app/input.status",
+    "app/hooks.provider-before-request",
+    "app/hooks.observe",
+    "app/hooks.messages-post-assistant",
     "app/provider.credentials.read",
     "app/agents.read",
     "app/sessions.read",
     "app/media.tasks.read"
   ],
   "contributes": {
+    "ui": {
+      "inputStatus": [
+        {
+          "id": "session-cache",
+          "title": "本会话缓存、输出速度与首响",
+          "text": "缓存：—　速度：—"
+        }
+      ]
+    },
     "cards": [
       {
         "id": "token-tracker-dashboard",
