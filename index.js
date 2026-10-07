@@ -6,6 +6,10 @@ import { FirstResponseTimer, registerFirstResponseHooks } from "./lib/first-resp
 import { GenerationSpeedTimer, registerGenerationSpeedHook } from "./lib/generation-speed.mjs";
 import { observeAsync } from "./lib/retained-map.mjs";
 
+import fs from "node:fs";
+import { RuntimeHealth, trackerStatus, classifyError } from "./lib/runtime-health.mjs";
+const pluginVersion = JSON.parse(fs.readFileSync(new URL("./manifest.json", import.meta.url), "utf8")).version;
+
 const MAX_LEDGER_LIMIT = 20000;
 
 function tokVal(value) {
@@ -36,6 +40,12 @@ export default defineApp(async (sdk) => {
   });
   const shared = {
     sdk,
+    health: new RuntimeHealth({ version: pluginVersion }),
+    scanIntervalMs: interval,
+    status() { return trackerStatus(shared); },
+    lastAttemptAt: null,
+    lastSuccessAt: null,
+    syncFailed: false,
     bus: sdk.bus,
     log,
     client,
@@ -70,6 +80,8 @@ export default defineApp(async (sdk) => {
   await refreshAgentNames(shared);
 
   async function performScan(force) {
+    shared.lastAttemptAt = new Date().toISOString();
+    shared.health.set("scanner", "unknown", "checking");
     let entries = [];
     let usageQueryError = null;
     try {
@@ -77,10 +89,28 @@ export default defineApp(async (sdk) => {
         ? (params) => sdk.usage.list(params)
         : (params) => sdk.bus.request("usage:list", params);
       const result = await listUsage({ limit: MAX_LEDGER_LIMIT });
-      entries = Array.isArray(result?.entries) ? result.entries : [];
+      if (result?.error) throw Object.assign(new Error(String(result.error?.message || result.error)), { code: result.code || result.error?.code, status: result.status });
+      if (!Array.isArray(result?.entries)) throw Object.assign(new Error("无效账本数据"), { code: "INVALID_DATA" });
+      entries = result.entries;
+      shared.health.set("ledger", "ok", "ledger_ok");
     } catch (error) {
-      usageQueryError = String(error?.message || "usage_query_failed").slice(0, 500);
-      shared.log.warn?.("[token-tracker] usage:list failed:", usageQueryError);
+      usageQueryError = classifyError(error);
+      shared.syncFailed = true;
+      shared.usageQueryError = usageQueryError;
+      shared.health.set("ledger", "degraded", usageQueryError);
+      // Recover persisted successful data after a reload; do not scan empty entries
+      // or advance lastScan when the authoritative query fails.
+      if (!shared.data) {
+        try {
+          const previous = await client.readSnapshot();
+          if (!shared.disposed && (previous.lastScan || Object.keys(previous.sessions || {}).length)) {
+            shared.data = previous;
+            shared.ready = true;
+            shared.lastSuccessAt = previous.usageQueryError ? null : previous.lastScan || null;
+          }
+        } catch {}
+      }
+      throw Object.assign(new Error("官方账本同步失败"), { code: "LEDGER_SYNC_FAILED", reason: usageQueryError });
     }
 
     const scanResult = await client.scan(entries, {
@@ -93,6 +123,9 @@ export default defineApp(async (sdk) => {
     if (shared.disposed) return scanResult;
     shared.data = data;
     shared.ready = true;
+    shared.syncFailed = false;
+    shared.lastSuccessAt = data.lastScan;
+    shared.health.set("scanner", "ok", "scan_ok");
     shared.coverageLimitReached = scanResult.coverageLimitReached;
     shared.usageQueryError = scanResult.usageQueryError;
     shared.scanMeta = scanResult;
@@ -114,6 +147,13 @@ export default defineApp(async (sdk) => {
         if (shared.disposed) break;
         shared.scanning = true;
         try { result = await performScan(nextForce); }
+        catch (error) {
+          if (!shared.disposed) {
+            shared.syncFailed = true;
+            shared.health.set("scanner", "degraded", error.reason || classifyError(error));
+          }
+          throw error;
+        }
         finally { shared.scanning = false; }
         nextForce = shared.pendingForce;
         shared.pendingForce = false;
@@ -123,6 +163,7 @@ export default defineApp(async (sdk) => {
     shared.scanPromise = Promise.resolve().then(run).finally(() => {
       shared.scanning = false;
       shared.scanPromise = null;
+      shared.pendingForce = false;
     });
     return shared.scanPromise;
   };
@@ -171,16 +212,30 @@ export default defineApp(async (sdk) => {
     bus: sdk.bus,
     inputStatus: sdk.inputStatus,
     sessions: sdk.sessions,
-    firstResponseQuery: (sessionId, sessionPath) => firstResponseTimer.latest({ sessionId, sessionPath }),
-    generationSpeedQuery: (sessionId, sessionPath, modelKey) => generationSpeedTimer.latest({ sessionId, sessionPath }, modelKey),
+    health: shared.health,
+    firstResponseQuery: (sessionId, sessionPath) => {
+      const state = shared.health.components.get("firstResponse");
+      return state?.state === "degraded" ? { unavailable: true, reason: state.code } : firstResponseTimer.latest({ sessionId, sessionPath });
+    },
+    generationSpeedQuery: (sessionId, sessionPath, modelKey) => {
+      const state = shared.health.components.get("speed");
+      return state?.state === "degraded" ? { unavailable: true, reason: state.code } : generationSpeedTimer.latest({ sessionId, sessionPath }, modelKey);
+    },
     log: (level, ...args) => { try { log[level]?.(...args); } catch {} },
   });
   const stopFirstResponseHooks = await registerFirstResponseHooks({
     hooks: sdk.hooks,
     timer: firstResponseTimer,
-    onRequestStart: (session) => generationSpeedTimer.begin(session),
-    onFailure: (session) => generationSpeedTimer.fail(session),
+    onStatus: (state, code) => shared.health.set("firstResponse", state, code),
+    onRequestStart: (session) => {
+      generationSpeedTimer.begin(session);
+      shared.health.metric("speed", "pending");
+      shared.health.metric("firstResponse", "pending");
+      observeAsync(() => sessionCache.onFirstResponseMetric(session));
+    },
+    onFailure: (session, reason) => { generationSpeedTimer.fail(session, reason); shared.health.metric("speed", reason); },
     onMetric: (metric) => {
+      shared.health.metric("firstResponse", metric.reason || "ok");
       // Hook IDs may be file UUIDs, not IDs accepted by usage:list/inputStatus.
       // Resolve through the official session map; never publish to a guessed ID.
       sessionCache.onFirstResponseMetric(metric).catch(error => {
@@ -192,8 +247,10 @@ export default defineApp(async (sdk) => {
   const stopGenerationSpeedHook = await registerGenerationSpeedHook({
     hooks: sdk.hooks,
     timer: generationSpeedTimer,
-    onFailure: (session) => firstResponseTimer.fail(session),
+    onStatus: (state, code) => shared.health.set("speed", state, code),
+    onFailure: (session, reason) => { firstResponseTimer.fail(session, reason); shared.health.metric("firstResponse", reason); },
     onMetric: (metric) => {
+      shared.health.metric("speed", metric.reason || "ok", metric.mode);
       sessionCache.onFirstResponseMetric(metric).catch(error => {
         try { log.warn?.("速度状态更新失败：", error?.message || error); } catch {}
       });
@@ -202,9 +259,12 @@ export default defineApp(async (sdk) => {
   });
   await sessionCache.start();
   const housekeeping = setInterval(() => {
-    const failures = [...firstResponseTimer.prune(), ...generationSpeedTimer.prune()];
+    const firstFailures = firstResponseTimer.prune();
+    const speedFailures = generationSpeedTimer.prune();
     sessionCache.prune();
-    for (const metric of failures) observeAsync(() => sessionCache.onFirstResponseMetric(metric));
+    for (const metric of firstFailures) shared.health.metric("firstResponse", metric.reason || "timeout");
+    for (const metric of speedFailures) shared.health.metric("speed", metric.reason || "timeout");
+    for (const metric of [...firstFailures, ...speedFailures]) observeAsync(() => sessionCache.onFirstResponseMetric(metric));
   }, 60000);
   housekeeping.unref?.();
   let settledRegistration = null;
@@ -215,8 +275,10 @@ export default defineApp(async (sdk) => {
         const identity = firstResponseTimer.keyFor(event?.session);
         const path = event?.session?.sessionPath;
         if ((identity && firstResponseTimer.pending.has(identity.key)) || (path && generationSpeedTimer.pending.has(path))) {
-          const metric = firstResponseTimer.fail(event.session);
-          generationSpeedTimer.fail(event.session);
+          const metric = firstResponseTimer.fail(event.session, "incomplete");
+          generationSpeedTimer.fail(event.session, "incomplete");
+          shared.health.metric("speed", "incomplete");
+          shared.health.metric("firstResponse", "incomplete");
           if (metric) observeAsync(() => sessionCache.onFirstResponseMetric(metric));
         }
       });
@@ -245,6 +307,7 @@ export default defineApp(async (sdk) => {
     shared.ready = false;
     shared.data = null;
     shared._seenRealtimeUsage.clear();
+    shared.health.clear();
     clearInterval(timer);
     clearInterval(housekeeping);
     firstResponseTimer.clear();
@@ -375,7 +438,7 @@ function pushToSSE(shared) {
   if (!realtime) return;
   if (shared.data?._balances) {
     realtime.balances = shared.data._balances;
-    realtime.balanceUpdatedAt = Date.now();
+    realtime.balanceUpdatedAt = shared.data._balanceUpdatedAt || null;
   }
   const payload = { type: "usage", data: realtimeSnapshot(realtime, shared.agentNames) };
   for (const client of shared._realtimeClients) {

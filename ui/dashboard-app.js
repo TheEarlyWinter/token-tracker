@@ -26,6 +26,7 @@ function trackerFetch(endpoint, options) {
   return fetch(getAppApiBase() + clean, options);
 }
 
+var _status = null, _viewError = false, _loadSequence = 0, _statusTimer = null, _closed = false;
 var D, R = "today", tc, mc, ac, _allAgents = null, _allModels = null, _allProviders = null, _selAgent = "", _selModel = "", _selProvider = "", _selType = "", _selBalance = "deepseek", _showDeleted = false, _provNames = null, _modelProv = "", _provRowHtml = "", _fxRate = null, _dispCur = "CNY";
 (function(){ try{_provNames=JSON.parse(localStorage.getItem("tt-prov-names")||"{}");}catch(e){_provNames={};} })();
 
@@ -38,7 +39,7 @@ function getDispCur() { try { return localStorage.getItem("tt-disp-cur") || "CNY
 function setDispCur(v) { try { localStorage.setItem("tt-disp-cur", v); } catch(e) {} _dispCur = v; }
 function syncCurBtn() {
   var b = $("cur-btn");
-  if (b) b.textContent = _dispCur === "CNY" ? "¥" : "$";
+  if (b) { b.textContent = _dispCur === "CNY" && _fxRate > 0 ? "¥" : "$"; b.title = _dispCur === "CNY" && !(_fxRate > 0) ? "汇率缺失，美元费用保留美元；点击切换币种偏好" : "切换展示币种"; }
 }
 function toggleCur() {
   _dispCur = _dispCur === "CNY" ? "USD" : "CNY";
@@ -53,28 +54,20 @@ function cny(v) {
 }
 // 美元金额：按 _dispCur 只显示一种币种
 function dual(v) {
-  if (!(v > 0)) return _dispCur === "CNY" ? "¥0" : "$0";
-  if (_dispCur === "CNY") {
-    var y = cny(v);
-    return y ? y : "$" + (v >= 1 ? v.toFixed(2) : v.toFixed(4));
-  }
-  return "$" + (v >= 1 ? v.toFixed(2) : v.toFixed(4));
+  var amount = Number.isFinite(v) ? Math.max(0,v) : 0;
+  if (_dispCur === "CNY" && _fxRate > 0) return "¥" + (amount * _fxRate).toFixed(amount * _fxRate >= 1 ? 2 : 4);
+  return "$" + (amount === 0 ? "0" : amount.toFixed(amount >= 1 ? 2 : 4));
 }
-// 本地货币 → 美元（统一合计口径）；CNY 价用汇率折算，USD 原值
+// Missing FX is unknown, never treat CNY as USD.
 function toUsd(v, cur) {
+  if (cur === "CNY" && !(_fxRate > 0)) return null;
   if (!(v > 0)) return 0;
-  if (cur === "CNY") return _fxRate ? v / _fxRate : v;
-  return v;
+  return cur === "CNY" ? v / _fxRate : v;
 }
-// 按模型货币显示：一律按 _dispCur 显示单一币种
 function dualByCur(v, cur) {
-  if (!(v > 0)) return _dispCur === "CNY" ? "¥0" : "$0";
-  if (_dispCur === "CNY") {
-    var cnyAmt = cur === "CNY" ? v : (_fxRate ? v * _fxRate : v);
-    return "¥" + (cnyAmt >= 1 ? cnyAmt.toFixed(2) : cnyAmt.toFixed(4));
-  }
-  var usd = toUsd(v, cur);
-  return "$" + (usd >= 1 ? usd.toFixed(2) : usd.toFixed(4));
+  if (cur !== "CNY") return dual(v);
+  if (_dispCur === "CNY" || !(_fxRate > 0)) return "¥" + (v >= 1 ? v.toFixed(2) : v.toFixed(4));
+  return dual(v / _fxRate);
 }
 
 function cnToday(){return new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Shanghai"})}
@@ -245,6 +238,7 @@ $("app").innerHTML =
   '<div class="main-area">'+
   '<div class="archive-intro"><span>PERSONAL USAGE ARCHIVE / 01</span><p>把每一次调用，放回工作流里看。</p></div>'+
   '<div class="hdr"><div class="hdr-left"><span class="hdr-title">用量</span><span id="lu">—</span></div><div id="hdrQuota" class="hdr-quota"></div><div class="hdr-right"><button class="btn-icon" id="rf" title="刷新数据"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button><button class="btn-icon" id="cur-btn" title="切换展示币种">¥</button><button class="btn-icon" id="th-btn" title="切换深色模式"></button><button class="btn-icon" id="st-btn" title="设置"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button><span class="unit-hint" id="uh">ⓘ</span></div></div>'+
+  '<details id="runtime-health" class="runtime-health"><summary id="health-summary">运行状态 · 尚未取得检查结果</summary><div id="health-details"></div><details class="metric-help"><summary>指标与采集范围说明</summary><p>首响：请求发出至 provider 响应元数据到达，不是真正的首 token TTFT。</p><p>速度：输出 token ÷ 完整请求时长，包含等待；优先实时请求计量，无有效实时样本时使用同模型最近 8 条有效账本时长回退，不是流式瞬时速度。</p><p>胶囊缓存率：本会话当前模型最近 50 条记录，按 token 体量加权；看板缓存率维持缓存读 token ÷ 当前筛选范围总 token 的既有口径。</p><p>费用为估算，与供应商账单可能不同。余额查询时间不代表用量同步时间。</p><p id="coverage-help"></p></details><details class="diagnostic-preview"><summary>查看诊断摘要</summary><pre id="diagnostic-text"></pre><button class="btn" id="copy-diagnostic">复制诊断摘要</button><span id="copy-result" role="status"></span><p>仅复制已预览的摘要，不会自动上传。</p></details></details>'+
   '<div id="cards" class="cg"></div>'+
   '<div id="media-section" style="display:none"></div>'+
   '<div class="main-layout"><div class="main-left">'+
@@ -261,46 +255,88 @@ $("app").innerHTML =
   '<div id="modal" class="modal" style="display:none"><div class="modal-bg"></div><div class="modal-box"><div class="modal-hdr"><span class="modal-tit">对话详情</span><button class="btn" onclick="document.getElementById(\'modal\').style.display=\'none\'">✕</button></div><div class="modal-body" id="modal-body"></div></div></div>';
 
 function load(refreshFirst) {
-  const el = $("ld"); if (el) el.style.display = "block";
+  var sequence = ++_loadSequence;
+  const el = $("ld");
+  if (el) { el.textContent = "翻阅档案…"; el.style.display = D ? "none" : "block"; }
   const qs = window.location.search;
   const sep = qs ? '&' : '?';
-
   var p = "range="+R+($("df").value?"&from="+$("df").value:"")+($("dt").value?"&to="+$("dt").value:"")+(_selAgent?"&agent="+encodeURIComponent(_selAgent):"")+(_selProvider?"&provider="+encodeURIComponent(_selProvider):"")+(_selModel?"&model="+encodeURIComponent(_selModel):"")+(_selType?"&type="+_selType:"");
-  const doFetch = () => trackerFetch("/data" + qs + sep + p).then(r => {
-    if (!r.ok) {
-      return r.json().catch(function(){ return {}; }).then(function(errJson){
-        throw Error(errJson.message || errJson.error || r.statusText);
-      });
-    }
-    return r.json();
-  }).then(d => {
-    if (d.error) { if (el) el.textContent = "未获授权或加载错误: " + (d.message || d.error); return; }
+  const doFetch = () => trackerFetch("/data" + qs + sep + p).then(async r => {
+    var d = await r.json();
+    if(sequence !== _loadSequence || _closed) return;
+    if(d._status) _status=d._status;
+    if(!r.ok || d.error) throw Error("数据暂不可用");
     if(!_allAgents||!D){_allAgents=d.agents.slice();_allModels=d.models.slice();}
     _allProviders=d.providers?d.providers.slice():null;
-    D = d; _fxRate = d._fxRate || null; if (el) el.style.display = "none";
+    D = d; _viewError=false; _fxRate = d._fxRate > 0 ? d._fxRate : null;
+    if (el) el.style.display = "none";
+    syncCurBtn();
     render();
-  }).catch(e => { if (el) el.textContent = "加载失败: "+e.message; });
-
+  }).catch(() => {
+    if(sequence !== _loadSequence || _closed) return;
+    _viewError=true;
+    renderStatus();
+    if(!D && el) el.textContent = _status?.freshness?.syncFailed ? "首次同步失败，数据尚未就绪。请展开运行状态查看原因。" : "尚未取得用量数据，等待同步或检查运行状态。";
+  });
   if (refreshFirst) {
-    trackerFetch("/refresh" + qs + sep + "range=" + R, {method: "POST"})
-      .then(doFetch).catch(doFetch);
-  } else {
-    doFetch();
-  }
+    trackerFetch("/refresh" + qs + sep + "range=" + R, {method: "POST"}).then(doFetch,doFetch);
+  } else doFetch();
+}
+function localTime(value) {
+  return value ? new Date(value).toLocaleString("zh-CN") : "未知";
+}
+function diagnosticText(status) {
+  if(!status) return "尚未取得诊断信息。";
+  var f=status.freshness||{};
+  var lines=["Token Tracker 诊断摘要", "插件版本："+status.pluginVersion, "宿主版本："+status.hostVersion,
+    "最后尝试同步："+localTime(f.lastAttemptAt), "最后成功同步："+localTime(f.lastSuccessAt), "扫描间隔："+f.intervalMs/1000+" 秒"];
+  (status.components||[]).forEach(function(c){lines.push(c.label+"："+c.state+" / "+c.code+" / "+localTime(c.at));});
+  Object.keys(status.metrics||{}).forEach(function(id){lines.push((id==="speed"?"速度":"首响")+"："+status.metrics[id].code);});
+  return lines.join("\n");
+}
+function renderStatus() {
+  var st=_status;
+  if(!st)return;
+  var f=st.freshness||{}, components=st.components||[];
+  var degraded=components.some(function(c){return c.state==="degraded";}) || Object.values(st.metrics||{}).some(function(m){return !["ok","pending","no_sample"].includes(m.code);});
+  var unknown=components.some(function(c){return c.state==="unknown";});
+  $("health-summary").textContent="运行状态 · "+(degraded?"部分能力异常或降级":unknown?"部分能力尚未取得检查结果":"正常");
+  var freshness=f.syncFailed?(f.dataAvailable?"同步失败，当前展示上次成功数据":"首次同步失败，尚无可用数据"):f.scanning?"正在同步":f.stale?"数据已超过两个扫描间隔，等待同步":f.lastSuccessAt?"最后成功同步："+localTime(f.lastSuccessAt):"等待首次同步";
+  if(_viewError && D) freshness="看板加载失败，当前保留上次展示的数据";
+  $("lu").textContent=freshness;
+  $("runtime-health").classList.toggle("degraded",degraded||f.syncFailed||f.stale||_viewError);
+  var html='<p>最后尝试同步：'+escHTML(localTime(f.lastAttemptAt))+'<br>最后成功同步：'+escHTML(localTime(f.lastSuccessAt))+'<br>扫描间隔：'+f.intervalMs/1000+' 秒</p>';
+  components.forEach(function(c){
+    html+='<div class="health-row"><strong>'+escHTML(c.label)+' · '+({ok:"正常",degraded:"异常/降级",unknown:"未知/检查中"}[c.state]||"未知")+'</strong><span>'+escHTML(c.reason)+' '+escHTML(c.suggestion)+'</span><small>'+escHTML(localTime(c.at))+'</small></div>';
+  });
+  var metrics=st.metrics||{};
+  Object.keys(metrics).forEach(function(id){html+='<p>'+ (id==="speed"?"最近胶囊速度":"最近胶囊首响") +'：'+escHTML(metrics[id].reason)+(id==='speed'&&metrics[id].code==='ok'?' 来源：'+escHTML(metrics[id].source):'')+'</p>';});
+  $("health-details").innerHTML=html;
+  $("coverage-help").textContent=st.coverage||"采集范围未知";
+  $("diagnostic-text").textContent=diagnosticText(st);
+}
+async function pollStatus() {
+  if(_closed)return;
+  try {
+    const r=await trackerFetch("/status"+window.location.search);
+    if(!r.ok)throw Error();
+    const status=await r.json();
+    if(_closed)return;
+    _status=status;
+    renderStatus();
+    // Only label data with the scan that actually produced it.
+    if(status.freshness.dataAvailable && (!D || D.lastScan!==status.freshness.lastSuccessAt)) load(false);
+  } catch {}
+  if(!_closed)_statusTimer=setTimeout(pollStatus,Math.min(60000,Math.max(5000,(_status?.freshness?.intervalMs||60000)/2)));
 }
 
 function refresh() { load(true); }
 
 function render() {
   if (!D) return;
-  syncDateInputs();
   updateFilterOpts();
   renderHdrQuota();
-  var luText = D.lastScan ? new Date(D.lastScan).toLocaleString("zh-CN") : "";
-  if (D._coverageNotice) {
-    luText += " (覆盖限制: " + D._coverageNotice + ")";
-  }
-  $("lu").textContent = luText;
+  renderStatus();
   // 汇率标注（双币显示时展示换算依据）
   var fxEl=$("fx");
   if(fxEl){
@@ -595,13 +631,18 @@ function renderModel() {
     listEl.className = "model-rank";
     $("mc").parentNode.appendChild(listEl);
   }
+  function emptyRank() {
+    listEl.innerHTML='<div class="rank-note">当前筛选范围尚无用量记录。</div>';
+    $("mc").style.display="none";
+  }
   var smv=$("sm")?_selModel:"";
   var items = [];
+  _provRowHtml = "";
   var title = "模型占比";
   if (smv && !_selAgent) {
-    var ag=!D.agents?null:D.agents.filter(function(a){return _showDeleted||!a.deleted;}); if(!ag||!ag.length)return;
+    var ag=!D.agents?null:D.agents.filter(function(a){return _showDeleted||!a.deleted;}); if(!ag||!ag.length){emptyRank();return;}
     title = "Agent 占比";
-    items = ag.map(function(a,i){var n=(D.agentNames||{})[a.id]||a.id;if(a.deleted)n+=' (已删除)';return{label:n,tokens:a.totalTokens,count:0,cost:0,color:cc.agent[i%cc.agent.length]};});
+    items = ag.map(function(a,i){var n=(D.agentNames||{})[a.id]||a.id;if(a.deleted)n+=' (已删除)';return{label:n,tokens:a.totalTokens,count:a.assistantCount||0,cost:0,color:cc.agent[i%cc.agent.length]};});
   } else if (D.providerBreakdown && D.providerBreakdown.length) {
     // 供应商选择分类（卡内筛选，仅影响模型占比视图）
     var provs=[], seenP={};
@@ -613,7 +654,7 @@ function renderModel() {
     // 1) opencode-go 官方费用/次数优先（真实计费数据，仅 opencode 有官方账单）
     if(D._subscriptionQuotas){for(var oi=0;oi<D._subscriptionQuotas.length;oi++){var ogq=D._subscriptionQuotas[oi];if(ogq&&ogq.modelSummary){for(var oj=0;oj<ogq.modelSummary.length;oj++){var msm=ogq.modelSummary[oj];if(msm&&msm.model){costMap[msm.model]=(msm.costUsd||0);countMap[msm.model]=(msm.count||0);}}}}}
     // 2) 非 opencode 模型：费用从价格表估算（未配置时为 0），次数用本地扫描 count
-    if(D._modelCosts){for(var mi2=0;mi2<D._modelCosts.length;mi2++){var mmc=D._modelCosts[mi2];if(mmc&&mmc.model&&!costMap[mmc.model])costMap[mmc.model]=mmc.cost||0;}}
+    if(D._modelCosts){for(var mi2=0;mi2<D._modelCosts.length;mi2++){var mmc=D._modelCosts[mi2];if(mmc&&mmc.model&&!costMap[mmc.model])costMap[mmc.model]=toUsd(mmc.cost,mmc.currency)||0;}}
     items = pbd.map(function(p,i){return{label:pLabels[i],tokens:p.totalTokens||0,count:countMap[p.model]!==undefined?countMap[p.model]:(p.count||0),cost:costMap[p.model]||0,color:cc.doughnut[i%cc.doughnut.length]};});
     // 卡内供应商筛选行（始终展示，供应商即分类）
     var provRow='<div class="mr-prov-row"><button data-p="" class="'+( _modelProv===""?"on":"")+'">全部</button>';
@@ -623,8 +664,11 @@ function renderModel() {
     provRow+='</div>';
     _provRowHtml=provRow;
   } else {
-    var m=D.models; if(!m||!m.length)return;
-    items = m.map(function(md,i){return{label:md.id,tokens:md.totalTokens||0,count:0,cost:0,color:cc.doughnut[i%cc.doughnut.length]};});
+    var m=D.models; if(!m||!m.length){emptyRank();return;}
+    items = m.map(function(md,i){
+      var cost=(D._modelCosts||[]).find(function(c){return c.model===md.id;});
+      return{label:md.id,tokens:md.totalTokens||0,count:md.assistantCount||0,cost:cost?toUsd(cost.cost,cost.currency):0,color:cc.doughnut[i%cc.doughnut.length]};
+    });
   }
   var ctEl=$("mc").parentElement.querySelector(".ct");
   ctEl.textContent=title;
@@ -640,22 +684,24 @@ function renderModel() {
       var w=total>0?(fn(it)/total*100):0;
       h+='<div class="mr-row"><div class="mr-rank">'+(k+1)+'</div>'+
         '<span class="mr-dot" style="background:'+it.color+'"></span>'+
-        '<div class="mr-info"><div class="mr-name">'+escHTML(it.label)+'</div>'+
+        '<div class="mr-info"><div class="mr-name" title="'+escHTML(it.label)+'">'+escHTML(it.label)+'</div>'+
         '<div class="mr-bar"><div class="mr-bar-fill" style="width:'+w+'%;background:'+it.color+'"></div></div></div>'+
-        '<div class="mr-val">'+fmtFn(fn(it))+'</div></div>';
+        '<div class="mr-val" title="'+escHTML(fn(it).toLocaleString())+'">'+fmtFn(fn(it))+'</div></div>';
     });
     h+='</div>';
     return {arr:arr,total:total,html:h};
   }
-  var colToken=rankBy(function(it){return it.tokens||0;},null,function(v){return fmt(v);},function(it){return (it.tokens||0)>0;});
+  var colToken=rankBy(function(it){return it.tokens||0;},null,function(v){return fmtAxis(v);},function(it){return (it.tokens||0)>0;});
   var colCount=rankBy(function(it){return it.count||0;},null,function(v){return fmt(v)+" 次";},function(it){return (it.count||0)>0;});
   var colCost=rankBy(function(it){return it.cost||0;},null,function(v){return dual(v);},function(it){return (it.cost||0)>0;});
 
-  var html=(_provRowHtml||"")+'<div class="mr-cols">';
+  var html=(_provRowHtml||"")+'<div class="mr-cols" style="--rank-columns:'+(1+(colCount.empty?0:1)+(colCost.empty?0:1))+'">';
   html+='<div class="mr-col"><div class="mr-col-title">Token</div>'+(colToken.html||'<div class="mr-col-empty">无数据</div>')+'</div>';
-  html+='<div class="mr-col"><div class="mr-col-title">次数</div>'+(colCount.html||'<div class="mr-col-empty">无数据</div>')+'</div>';
-  html+='<div class="mr-col"><div class="mr-col-title">费用</div>'+(colCost.html||'<div class="mr-col-empty">无数据</div>')+'</div>';
+  if(!colCount.empty)html+='<div class="mr-col"><div class="mr-col-title">次数</div>'+colCount.html+'</div>';
+  if(!colCost.empty)html+='<div class="mr-col"><div class="mr-col-title" title="仅包含可换算且已有价格的估算费用">费用</div>'+colCost.html+'</div>';
   html+='</div>';
+  if(colCost.empty)html+='<div class="rank-note">费用占比暂不可用：尚无可用定价或换算数据。</div>';
+  if(colCount.empty)html+='<div class="rank-note">当前范围暂无调用次数记录。</div>';
   listEl.innerHTML=html;
   $("mc").style.display="none";
   listEl.style.display="block";
@@ -896,9 +942,8 @@ function renderHdrQuota(){
 function renderConsumption(){
   var costs=D._modelCosts||[];
   if(!costs.length){var cs=$("cs-section");if(cs)cs.style.display="none";return;}
-  var hasCost=false;
-  for(var i=0;i<costs.length;i++){if(costs[i].cost>0){hasCost=true;break;}}
-  if(!hasCost){var cs=$("cs-section");if(cs)cs.style.display="none";return;}
+  var hasCost=false, hasKnownCost=false, incomplete=false;
+  for(var i=0;i<costs.length;i++){if(costs[i].cost>0)hasCost=true;if(costs[i].priced!==false && toUsd(costs[i].cost,costs[i].currency)!==null)hasKnownCost=true;if(costs[i].priced===false || toUsd(costs[i].cost,costs[i].currency)===null)incomplete=true;}
   var pt=D._priceTable||{};
   var total=0;
   for(var i=0;i<costs.length;i++){if(costs[i].cost>0){total+=toUsd(costs[i].cost,costs[i].currency);}}
@@ -911,7 +956,7 @@ function renderConsumption(){
   for(var pk2 in pt){var e2=pt[pk2];if(e2&&e2.slots&&e2.slots.length){for(var si=0;si<e2.slots.length;si++){var s=e2.slots[si];var f=s.from.split(':').map(Number),t=s.to.split(':').map(Number);if(!(f[0]*60+(f[1]||0)===0&&t[0]*60+(t[1]||0)===1440)){hasSlots=true;break;}}}}
 
   var modelInfo={};
-  for(var mi=0;mi<(D.models||[]).length;mi++){var m2=D.models[mi];modelInfo[m2.id]={tokIn:m2.input||0,tokOut:m2.output||0,tokCache:m2.cacheRead||0,tokCacheW:m2.cacheWrite||0};}
+  for(var mi=0;mi<(D.models||[]).length;mi++){var m2=D.models[mi];modelInfo[m2.id]={totalTokens:m2.totalTokens||0,tokIn:m2.input||0,tokOut:m2.output||0,tokCache:m2.cacheRead||0,tokCacheW:m2.cacheWrite||0};}
 
   // slot 模型列表
   var slotModels=[];
@@ -960,7 +1005,7 @@ function renderConsumption(){
   var slotTotalUsd=0, nonSlotTotalUsd=0;
   for(var i=0;i<costs.length;i++){
     var c=costs[i];
-    if(c.cost<=0)continue;
+    if(!((c.totalTokens || modelInfo[c.model]?.totalTokens || 0)>0) && !(c.callCount>0) && !(c.cost>0))continue;
     var curM=c.currency||"USD";
     var label=c.model;
     var isSlot=false, split=null;
@@ -981,12 +1026,12 @@ function renderConsumption(){
         else{tokIn=null;tokOut=null;tokCache=null;}
       }else if(info2){tokIn=info2.tokIn;tokOut=info2.tokOut;tokCache=info2.tokCache;}
       var fmtTokCell=function(v){return v==null?'—':v.toLocaleString();};
-      h+='<div class="cs-tr"><span class="ct-c1">'+escHTML(label)+'<span class="ct-cur">'+(curM==="CNY"?"人民币":"美元")+'</span></span><span class="ct-n">'+fmtTokCell(tokIn)+'</span><span class="ct-n">'+fmtTokCell(tokOut)+'</span><span class="ct-n">'+fmtTokCell(tokCache)+'</span><span class="ct-a">'+dualByCur(c.cost,curM)+'</span></div>';
+      h+='<div class="cs-tr"><span class="ct-c1">'+escHTML(label)+'<span class="ct-cur">'+(curM==="CNY"?"人民币":"美元")+'</span></span><span class="ct-n">'+fmtTokCell(tokIn)+'</span><span class="ct-n">'+fmtTokCell(tokOut)+'</span><span class="ct-n">'+fmtTokCell(tokCache)+'</span><span class="ct-a">'+(c.priced===false?'<span title="未配置价格，不能推断为免费">—（未定价）</span>':dualByCur(c.cost,curM))+'</span></div>';
     }
   }
   displayTotal=slotTotalUsd+nonSlotTotalUsd;
-  h+='<div class="cs-total-row"><span class="ct-c1">合计</span><span class="ct-n"></span><span class="ct-n"></span><span class="ct-n"></span><span class="ct-a">'+dual(displayTotal)+'</span></div>';
-  h+='</div></div>';
+  h+='<div class="cs-total-row"><span class="ct-c1">合计'+(incomplete?'（部分费用）':'')+'</span><span class="ct-n"></span><span class="ct-n"></span><span class="ct-n"></span><span class="ct-a">'+(hasKnownCost?dual(displayTotal):'—')+'</span></div>';
+  h+='</div><div class="rank-note">费用为价格表估算，与供应商账单可能不同。'+(incomplete?'未定价及缺少汇率的费用不计入合计。':'')+'</div></div>';
   var el=$("cs-section");
   if(el){el.innerHTML=h;el.style.display="";}
 }
@@ -1520,10 +1565,18 @@ function refreshQuota() {
     })
     .catch(function(){});
 }
-setInterval(function(){ refreshQuota(); }, 60000);
+var quotaTimer=setInterval(function(){ refreshQuota(); }, 60000);
 document.addEventListener("visibilitychange", function(){
   if (!document.hidden) refreshQuota();
 });
 
+$("copy-diagnostic").onclick=async function(){
+  var text=$("diagnostic-text").textContent;
+  try { await navigator.clipboard.writeText(text); $("copy-result").textContent="已复制"; }
+  catch { $("copy-result").textContent="无法访问剪贴板，请选择上方摘要手动复制。"; }
+};
+window.addEventListener("pagehide",function(){_closed=true;clearTimeout(_statusTimer);clearInterval(quotaTimer);});
+syncDateInputs();
 load(false);
+pollStatus();
 })();

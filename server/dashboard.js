@@ -3,6 +3,7 @@ import path from "node:path";
 import https from "node:https";
 import crypto from "node:crypto";
 import vm from "node:vm";
+import { trackerStatus } from "../lib/runtime-health.mjs";
 
 // OpenCode Go 官方定价表（opencode.ai/docs/go 校验）
 const DEFAULT_PRICE_TABLE = {
@@ -173,14 +174,7 @@ export default function (app, ctx) {
     try {
       const cache = ctx._tokenCache;
       if (!cache?.ready || !cache.data) {
-        return c.json({ error: "数据未就绪", code: "NOT_READY" }, 503);
-      }
-      if (cache.usageQueryError) {
-        return c.json({
-          error: "unauthorized",
-          message: "未获授权读取账本用量，请在设置中授予 app/usage.read 权限: " + cache.usageQueryError,
-          code: "PERMISSION_DENIED"
-        }, 403);
+        return c.json({ error: "数据未就绪", code: "NOT_READY", _status: trackerStatus(cache) }, 503);
       }
 
       const range = c.req.query("range") || "all";
@@ -390,16 +384,19 @@ export default function (app, ctx) {
           cost: estimatedCost,
           estimatedCost,
           costSource: "local-estimate",
+          priced: !!price,
+          totalTokens: m.totalTokens || 0,
           unit,
           inputCost,
           outputCost,
           cacheCost,
-          callCount: mgEntry?.callCount || 0,
+          callCount: m.assistantCount || mgEntry?.callCount || 0,
           successCount: mgEntry?.successCount || 0,
           currency: price?.currency || "USD"
         });
       }
       result._modelCosts = modelCosts;
+      result._status = trackerStatus(cache);
 
       // 附加价格表与脱敏后的余额配置
       result._priceTable = pt;
@@ -409,7 +406,7 @@ export default function (app, ctx) {
       // 覆盖限制标记（窗口达 20000 提醒）
       result._coverageLimitReached = !!cache.data?.coverageLimitReached;
       result._coverageNotice = cache.data?.coverageLimitReached
-        ? "账本保留窗口达 20,000 条，超出部分已由本地归档承接。"
+        ? "账本读取窗口达 20,000 条；历史仅包含插件已采集并归档的记录。"
         : null;
 
       return c.json(result);
@@ -572,6 +569,7 @@ export default function (app, ctx) {
 </head>
 <body data-hana-theme="${esc(th)}" data-surface="page">
 <div id="app"></div>
+<script src="/api/apps/token-tracker/ui/model-filter-options.js"></script>
 <script type="module" src="/api/apps/token-tracker/ui/dashboard-app.js"></script>
 </body>
 </html>`);
@@ -580,6 +578,8 @@ export default function (app, ctx) {
   // 路由挂载（同时兼容 /dashboard/* 与标准根路由）
   app.get("/dashboard/data", handleData);
   app.get("/data", handleData);
+  app.get("/status", c => c.json(trackerStatus(ctx._tokenCache)));
+  app.get("/dashboard/status", c => c.json(trackerStatus(ctx._tokenCache)));
 
   app.post("/dashboard/refresh", handleRefresh);
   app.post("/refresh", handleRefresh);

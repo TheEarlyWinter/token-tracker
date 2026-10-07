@@ -3758,3 +3758,15 @@ input, select, textarea, button {
 
 /* ── 响应式：中等窗口下图表单列，避免模型占比三栏榜与 Agent 对比并排挤压 ── */
 @media (max-width: 1200px) { .chart-row { grid-template-columns: 1fr; } }
+
+/* Quiet, collapsed operational details. */
+.runtime-health { margin: 0 0 20px; padding: 10px 14px; border: 1px solid var(--card-border); border-radius: 8px; color: var(--text-secondary); font-size: 12px; }
+.runtime-health summary { cursor: pointer; }
+.runtime-health.degraded > summary { color: var(--text-primary); }
+.health-row { display: grid; gap: 5px; padding: 10px 0; border-bottom: 1px solid var(--card-border); }
+.health-row small { opacity: .75; }
+.metric-help, .diagnostic-preview { margin-top: 14px; }
+.diagnostic-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; user-select: text; }
+.rank-note { margin-top: 10px; font-size: 11px; color: var(--text-secondary); }
+.mr-cols { grid-template-columns: repeat(var(--rank-columns, 3), minmax(0, 1fr)); }
+@media (max-width: 900px) { .mr-cols { grid-template-columns: 1fr; } }

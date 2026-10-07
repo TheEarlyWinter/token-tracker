@@ -267,11 +267,11 @@ body {
 
 /* ── 成就档案视觉系统：用量页 ── */
 :root, [data-theme="light"], [data-hana-theme="warm-paper"], [data-hana-theme="inherit"] {
-  --bg: #f3f5f3;
-  --bg-sidebar: #edf1ef;
-  --bg-card: #fbfcfb;
+  --bg: #ffffff;
+  --bg-sidebar: #ffffff;
+  --bg-card: #ffffff;
   --bg-elevated: #ffffff;
-  --bg-grouped: #e8eeec;
+  --bg-grouped: #f5f5f5;
   --card-border: #dbe3e1;
   --text-primary: #172326;
   --text-secondary: #667679;
