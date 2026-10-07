@@ -48,7 +48,7 @@ var D, R = "today", tc, mc, ac, _allAgents = null, _allModels = null, _allProvid
 (function(){ try{_provNames=JSON.parse(localStorage.getItem("tt-prov-names")||"{}");}catch(e){_provNames={};} })();
 
 function $(id) { return document.getElementById(id); }
-function fmt(n) { if(!n||n===0) return "0"; if(n>=1e8) return (n/1e8).toFixed(1)+"亿("+n.toLocaleString()+")"; if(n>=1e6) return (n/1e6).toFixed(1)+"M"; if(n>=1e3) return (n/1e3).toFixed(1)+"k"; return n.toLocaleString(); }
+function fmt(n) { if(!n||n===0) return "0"; if(n>=1e8) return (n/1e8).toFixed(1)+"亿"; if(n>=1e6) return (n/1e6).toFixed(1)+"M"; if(n>=1e3) return (n/1e3).toFixed(1)+"k"; return n.toLocaleString(); }
 function fmtAxis(n) { if(!n||n===0) return "0"; if(n>=1e8) return (n/1e8).toFixed(1)+"亿"; if(n>=1e6) return (n/1e6).toFixed(1)+"M"; if(n>=1e3) return (n/1e3).toFixed(1)+"k"; return n.toLocaleString(); }
 function _pn(p) { return (_provNames && _provNames[p]) || p; }
 // 展示币种偏好（localStorage + 头部按钮切换）：USD / CNY，全页单一币种

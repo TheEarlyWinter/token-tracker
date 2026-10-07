@@ -1,6 +1,6 @@
 {
   "name": "token-tracker",
-  "version": "6.4.16",
+  "version": "6.4.17",
   "private": true,
   "type": "module",
   "scripts": {
