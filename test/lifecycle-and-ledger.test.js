@@ -74,7 +74,8 @@ test("App V2 生命周期与账本拉取/归一化/归档持久化测试", async
         }
         return {};
       },
-      subscribe: (fn) => {
+      subscribe: (fn, filter) => {
+        assert.deepEqual(filter.types, ["llm_usage"], "只订阅 App 所需的官方账本事件");
         mockSubscribers.add(fn);
         return () => mockSubscribers.delete(fn);
       },
@@ -91,6 +92,7 @@ test("App V2 生命周期与账本拉取/归一化/归档持久化测试", async
 
   const shared = mockCtx._tokenCache;
   assert.ok(shared, "宿主 context 上必须成功挂载 _tokenCache");
+  assert.equal(mockSubscribers.size, 1, "官方用量事件必须成功订阅");
 
   // 等待首次异步扫描完成
   await shared.scan(true);

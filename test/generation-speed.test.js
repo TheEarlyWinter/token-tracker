@@ -47,7 +47,8 @@ test("zero output, sub-100ms intervals and non-assistant messages are rejected",
   assert.equal(timer.complete(a, msg({ usage: { output: 0 } })), null);
   timer.begin(a); now += 1000;
   assert.equal(timer.complete(a, msg({ role: "tool" })), null);
-  assert.equal(timer.latest(a, "test/m1"), null);
+  assert.equal(timer.latest(a, "test/m1").unavailable, true);
+  assert.equal(timer.latest(a, "test/m1").tps, null);
 });
 
 test("denied completion hook degrades with a warning and remains disposable", async () => {

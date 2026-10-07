@@ -4,6 +4,7 @@ import { normalizeEntryForArchive } from "./lib/ledger-normalization.mjs";
 import { SessionCacheStatus } from "./lib/session-cache.mjs";
 import { FirstResponseTimer, registerFirstResponseHooks } from "./lib/first-response.mjs";
 import { GenerationSpeedTimer, registerGenerationSpeedHook } from "./lib/generation-speed.mjs";
+import { observeAsync } from "./lib/retained-map.mjs";
 
 const MAX_LEDGER_LIMIT = 20000;
 
@@ -24,7 +25,10 @@ export default defineApp(async (sdk) => {
     // 配置读取失败时使用默认扫描间隔。
   }
   const interval = scanIntervalSec * 1000;
-  const log = sdk.logger || console;
+  const hostLog = sdk.logger || console;
+  const log = Object.fromEntries(["info", "warn", "error", "debug"].map(level => [level,
+    (...args) => observeAsync(() => hostLog[level]?.(args.map(String).join(" "))),
+  ]));
   const client = new LocalClient({
     ctx: sdk,
     dataDir,
@@ -86,6 +90,7 @@ export default defineApp(async (sdk) => {
       usageQueryError,
     });
     const data = await client.readSnapshot();
+    if (shared.disposed) return scanResult;
     shared.data = data;
     shared.ready = true;
     shared.coverageLimitReached = scanResult.coverageLimitReached;
@@ -174,6 +179,7 @@ export default defineApp(async (sdk) => {
     hooks: sdk.hooks,
     timer: firstResponseTimer,
     onRequestStart: (session) => generationSpeedTimer.begin(session),
+    onFailure: (session) => generationSpeedTimer.fail(session),
     onMetric: (metric) => {
       // Hook IDs may be file UUIDs, not IDs accepted by usage:list/inputStatus.
       // Resolve through the official session map; never publish to a guessed ID.
@@ -186,6 +192,7 @@ export default defineApp(async (sdk) => {
   const stopGenerationSpeedHook = await registerGenerationSpeedHook({
     hooks: sdk.hooks,
     timer: generationSpeedTimer,
+    onFailure: (session) => firstResponseTimer.fail(session),
     onMetric: (metric) => {
       sessionCache.onFirstResponseMetric(metric).catch(error => {
         try { log.warn?.("速度状态更新失败：", error?.message || error); } catch {}
@@ -194,6 +201,27 @@ export default defineApp(async (sdk) => {
     log: (level, ...args) => { try { log[level]?.(...args); } catch {} },
   });
   await sessionCache.start();
+  const housekeeping = setInterval(() => {
+    const failures = [...firstResponseTimer.prune(), ...generationSpeedTimer.prune()];
+    sessionCache.prune();
+    for (const metric of failures) observeAsync(() => sessionCache.onFirstResponseMetric(metric));
+  }, 60000);
+  housekeeping.unref?.();
+  let settledRegistration = null;
+  if (typeof sdk.hooks?.on === "function") {
+    try {
+      settledRegistration = await sdk.hooks.on("agent/settled", event => {
+        if (shared.disposed) return;
+        const identity = firstResponseTimer.keyFor(event?.session);
+        const path = event?.session?.sessionPath;
+        if ((identity && firstResponseTimer.pending.has(identity.key)) || (path && generationSpeedTimer.pending.has(path))) {
+          const metric = firstResponseTimer.fail(event.session);
+          generationSpeedTimer.fail(event.session);
+          if (metric) observeAsync(() => sessionCache.onFirstResponseMetric(metric));
+        }
+      });
+    } catch (error) { log.warn(`[token-tracker] settled hook unavailable: ${error?.message || error}`); }
+  }
 
   let unsubBus = null;
   try {
@@ -205,7 +233,7 @@ export default defineApp(async (sdk) => {
         } catch (error) {
           shared.log.warn?.("[token-tracker] event handling error:", error?.message || error);
         }
-      });
+      }, { types: ["llm_usage"] });
     }
   } catch (error) {
     shared.log.warn?.("[token-tracker] bus.subscribe failed:", error?.message || error);
@@ -214,7 +242,13 @@ export default defineApp(async (sdk) => {
   shared.dispose = () => {
     if (shared.disposePromise) return shared.disposePromise;
     shared.disposed = true;
+    shared.ready = false;
+    shared.data = null;
+    shared._seenRealtimeUsage.clear();
     clearInterval(timer);
+    clearInterval(housekeeping);
+    firstResponseTimer.clear();
+    generationSpeedTimer.clear();
     const cleanup = [];
     try {
       if (typeof unsubBus === "function") cleanup.push(Promise.resolve(unsubBus()));
@@ -229,7 +263,12 @@ export default defineApp(async (sdk) => {
     cleanup.push(sessionCache.dispose());
     cleanup.push(stopFirstResponseHooks());
     cleanup.push(stopGenerationSpeedHook());
-    shared.disposePromise = Promise.allSettled(cleanup).then(() => undefined);
+    if (settledRegistration?.disposeAsync) cleanup.push(settledRegistration.disposeAsync());
+    else if (typeof settledRegistration === "function") cleanup.push(Promise.resolve(settledRegistration()));
+    shared.disposePromise = Promise.allSettled(cleanup).then(results => {
+      const failures = results.filter(result => result.status === "rejected");
+      if (failures.length) throw new AggregateError(failures.map(result => result.reason), "Token Tracker cleanup failed");
+    });
     return shared.disposePromise;
   };
 

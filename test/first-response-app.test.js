@@ -64,6 +64,15 @@ test("App publishes real timed speed with zero-duration ledger and preserves fir
     await new Promise(resolve => setTimeout(resolve, 1800));
     assert.equal(updates.at(-1).text, firstText);
     assert.ok(updates.length >= 2);
+    callbacks["provider/before-request"]({ session: { sessionId: "file-uuid", sessionPath } });
+    callbacks["provider/after-response"]({ session: { sessionId: "file-uuid", sessionPath }, status: 502 });
+    await new Promise(resolve => setTimeout(resolve, 250));
+    assert.match(updates.at(-1).text, /速度：—/);
+    assert.match(updates.at(-1).text, /首响：—/);
+    callbacks["provider/before-request"]({ session: { sessionId: "file-uuid", sessionPath } });
+    callbacks["agent/settled"]({ session: { sessionId: "file-uuid", sessionPath } });
+    await new Promise(resolve => setTimeout(resolve, 250));
+    assert.match(updates.at(-1).text, /速度：—.*首响：—/);
   } finally {
     await ctx._tokenCache?.dispose();
     fs.rmSync(dataDir, { recursive: true, force: true });

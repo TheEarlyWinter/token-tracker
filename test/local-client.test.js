@@ -59,6 +59,29 @@ test("client batches ledger payloads and returns a paged child-process snapshot"
   }
 });
 
+test("dispose cancels queued operations and reports stop failures instead of pretending success", async () => {
+  const dir = tempDir();
+  const fake = createFakeRuntime();
+  const client = new LocalClient({ ctx: { dataDir: dir, runtime: fake.api }, dataDir: dir });
+  try {
+    await client.start();
+    const queued = client.call("status");
+    const rejection = assert.rejects(queued, { code: "APP_STOPPED" });
+    await client.dispose();
+    await rejection;
+    assert.equal(fake.stats.stops, 1);
+    await assert.rejects(client.call("status"), /已停止/);
+  } finally { await client.dispose(); fs.rmSync(dir, { recursive: true, force: true }); }
+  const failedDir = tempDir();
+  const failing = createFakeRuntime();
+  const stopped = new LocalClient({ ctx: { dataDir: failedDir, runtime: failing.api }, dataDir: failedDir });
+  await stopped.start();
+  const realStop = failing.api.stop;
+  failing.api.stop = async () => { throw new Error("stop denied"); };
+  try { await assert.rejects(stopped.dispose(), /stop denied/); }
+  finally { await realStop("fake-runtime-1"); fs.rmSync(failedDir, { recursive: true, force: true }); }
+});
+
 test("chunking keeps RPC requests bounded and rejects one oversized ledger entry", () => {
   const values = Array.from({ length: 12 }, (_, i) => ({ requestId: String(i), payload: "x".repeat(40) }));
   const chunks = chunkLedgerEntries(values, 180);

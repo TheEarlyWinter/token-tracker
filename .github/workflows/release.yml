@@ -1,10 +1,7 @@
-name: Build & Release Plugin
+name: Test, Package and Release App
 
 on:
   push:
-    branches:
-      - main
-      - master
     tags:
       - "v*"
   workflow_dispatch:
@@ -13,49 +10,47 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: Package Plugin
+  release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Get version
-        id: get_version
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Verify version contract
+        id: version
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/}
-          else
-            VERSION="v1.0.0"
-          fi
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "ZIP_NAME=token-tracker-$VERSION.zip" >> $GITHUB_OUTPUT
-
-      - name: Create Plugin Archive
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const manifest = JSON.parse(fs.readFileSync('manifest.json'));
+          const pkg = JSON.parse(fs.readFileSync('package.json'));
+          assert.equal(pkg.version, manifest.version);
+          assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
+          const tag = `v${pkg.version}`;
+          if (process.env.GITHUB_REF_TYPE === 'tag') assert.equal(process.env.GITHUB_REF_NAME, tag);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `tag=${tag}\narchive=token-tracker-${tag}.zip\n`);
+          JS
+      - name: Run tests
+        run: npm test
+      - name: Package tracked source only
+        env:
+          ARCHIVE: ${{ steps.version.outputs.archive }}
         run: |
           mkdir -p dist
-          zip -r "dist/${{ steps.get_version.outputs.ZIP_NAME }}" . \
-            -x "*.git*" \
-            -x "*.github*" \
-            -x "*local-accounts.json*" \
-            -x "*.local.json*" \
-            -x "*.env*" \
-            -x "*node_modules*" \
-            -x "dist/*"
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+          git archive --format=zip --output="dist/$ARCHIVE" HEAD
+          (cd dist && sha256sum "$ARCHIVE" > "$ARCHIVE.sha256")
+      - uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.get_version.outputs.ZIP_NAME }}
-          path: dist/${{ steps.get_version.outputs.ZIP_NAME }}
+          name: token-tracker-${{ steps.version.outputs.tag }}
+          path: dist/*
           if-no-files-found: error
-
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Publish stable release
+        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/${{ steps.get_version.outputs.ZIP_NAME }}
-          name: Release ${{ steps.get_version.outputs.VERSION }}
+          files: dist/*
+          name: Token Tracker ${{ steps.version.outputs.tag }}
           generate_release_notes: true
           draft: false
           prerelease: false

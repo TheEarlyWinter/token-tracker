@@ -47,6 +47,7 @@ async function launchService(dataDir) {
   return {
     child,
     rpc,
+    get output() { return output; },
     async readyStatus() {
       const limit = Date.now() + 5000;
       while (Date.now() < limit) {
@@ -57,12 +58,13 @@ async function launchService(dataDir) {
       throw new Error(`runtime engine not ready: ${output}`);
     },
     async stop() {
-      if (child.exitCode !== null) return;
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      const exited = new Promise(resolve => child.once("exit", resolve));
+      const timeout = setTimeout(() => child.kill("SIGKILL"), 3000);
       child.kill("SIGTERM");
-      await Promise.race([
-        new Promise(resolve => child.once("exit", resolve)),
-        pause(3000).then(() => { child.kill("SIGKILL"); }),
-      ]);
+      try { await exited; } finally { clearTimeout(timeout); }
+      assert.equal(child.exitCode, 0, "SIGTERM must exit cleanly without SIGKILL escalation");
+      assert.throws(() => process.kill(child.pid, 0), { code: "ESRCH" }, "child PID must have been reaped");
     },
   };
 }
@@ -110,11 +112,28 @@ test("managed child service authenticates RPC, scans ledger, and recovers journa
     await service.stop();
     service = null;
 
+    fs.appendFileSync(path.join(dataDir, "usage-archive.jsonl"), '\n\n{broken}\n{"cut":');
+    fs.appendFileSync(path.join(dataDir, "token-cache.json.journal"), '\n\n{broken}\n{"cut":');
     service = await launchService(dataDir);
     const restarted = await service.readyStatus();
     assert.equal(restarted.dataReady, true);
+    assert.match(service.output, /跳过.*行损坏记录/);
     const recovered = await service.rpc("cache.page", { cursor: 0, maxBytes: 65536 });
     assert.equal(recovered.body.value.sessions["agent-a::desktop::2026-10-06"].totalTokens, 15);
+    const rescanId = "after-corrupt-tail";
+    await service.rpc("scan.begin", { scanId: rescanId });
+    await service.rpc("scan.append", { scanId: rescanId, entries: [entry("req-1"), entry("req-2")] });
+    const rescan = await service.rpc("scan.commit", { scanId: rescanId });
+    let completed;
+    for (let i = 0; i < 100; i++) {
+      completed = await service.rpc("scan.status", { jobId: rescan.body.value.jobId });
+      if (completed.body.value.state !== "running") break;
+      await pause(20);
+    }
+    assert.equal(completed.body.value.state, "complete");
+    assert.equal(completed.body.value.result.newArchivedCount, 1);
+    const nextPage = await service.rpc("cache.page", { cursor: 0, maxBytes: 65536 });
+    assert.equal(nextPage.body.value.sessions["agent-a::desktop::2026-10-06"].totalTokens, 30);
   } finally {
     await service?.stop();
     fs.rmSync(dataDir, { recursive: true, force: true });

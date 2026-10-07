@@ -108,6 +108,29 @@ test("existing sessions resolve path through official session API when ledger la
   } finally { await status.dispose(); }
 });
 
+test("bounded path resolution preserves active sessions at the front of a large catalog", async () => {
+  let lookups = 0;
+  const sessionPath = "/sessions/active.jsonl";
+  const catalog = [{ sessionId: "active", path: sessionPath }, { sessionId: "other", path: "/sessions/other.jsonl" },
+    ...Array.from({ length: 2000 }, (_, i) => ({ sessionId: `old-${i}`, path: `/sessions/old-${i}.jsonl` }))];
+  const status = new SessionCacheStatus({
+    sessions: { list: async () => { lookups++; return { sessions: catalog }; } },
+    bus: { request: async () => ({ entries: [ledgerEntry("one")] }) },
+    inputStatus: { set: async () => {} },
+    maxSessions: 32,
+  });
+  try {
+    await Promise.all([
+      status.onFirstResponseMetric({ sessionId: "hook-uuid", sessionPath, lastMs: 1200 }),
+      status.resolveSessionPath("other"),
+    ]);
+    assert.equal(status.sessionIdForPath(sessionPath), "active");
+    assert.equal(status.sessionPathForId("other"), "/sessions/other.jsonl");
+    assert.equal(lookups, 1);
+    assert.equal(status.sessionIdByPath.size, 2, "unrelated catalog entries must not pollute the bounded hot cache");
+  } finally { await status.dispose(); }
+});
+
 test("a refresh arriving during publication is replayed instead of dropped", async () => {
   let release;
   let calls = 0;

@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "token-tracker",
   "name": "Token 用量",
-  "version": "6.4.7",
+  "version": "6.4.8",
   "minAppVersion": "0.1050.9",
   "description": "展示所有 Agent 的 Token 消耗统计，支持按时间、Agent、模型筛选和下钻。",
   "entry": "index.js",
