@@ -40,6 +40,14 @@ jobs:
           mkdir -p dist
           git archive --format=zip --output="dist/$ARCHIVE" HEAD
           (cd dist && sha256sum "$ARCHIVE" > "$ARCHIVE.sha256")
+      - name: Verify clean release archive
+        env:
+          ARCHIVE: ${{ steps.version.outputs.archive }}
+        run: |
+          VERIFY_DIR=$(mktemp -d)
+          unzip -q "dist/$ARCHIVE" -d "$VERIFY_DIR"
+          (cd "$VERIFY_DIR" && npm test)
+          rm -rf "$VERIFY_DIR"
       - uses: actions/upload-artifact@v4
         with:
           name: token-tracker-${{ steps.version.outputs.tag }}

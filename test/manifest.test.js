@@ -15,7 +15,7 @@ test("Manifest V2 合规性与权限最小化校验", () => {
 
   assert.equal(manifest.manifestVersion, 2, "manifestVersion 必须为 2");
   assert.equal(manifest.id, "token-tracker", "id 必须为 token-tracker");
-  assert.equal(manifest.version, "6.4.8", "版本必须定为 6.4.8");
+  assert.match(manifest.version, /^\d+\.\d+\.\d+$/, "正式版本必须是三段数字");
   const packageJson = JSON.parse(fs.readFileSync(path.join(rootDir, "package.json"), "utf-8"));
   assert.equal(packageJson.version, manifest.version, "package.json 与 manifest 版本必须一致");
   assert.equal(manifest.minAppVersion, "0.1050.9", "输入状态位需要宿主 0.1050.9 或更新版本");

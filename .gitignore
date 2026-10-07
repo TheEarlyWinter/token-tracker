@@ -13,3 +13,4 @@ Thumbs.db
 # 界面预览图例外
 !assets/
 !assets/*.png
+!ui/assets/face.png

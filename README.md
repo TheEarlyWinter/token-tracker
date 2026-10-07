@@ -4,7 +4,7 @@
 
 ## 版本与发布策略
 
-版本 **6.4.8**。Tag、manifest 和 package 版本必须一致。只有完成测试与安装验收后才推送 `v6.4.8`；Tag 不是验收证据。
+版本 **6.4.9**。Tag、manifest 和 package 版本必须一致。6.4.8 的 CI 因封面未纳入 Git 跟踪而失败，未产生正式 Release；6.4.9 仅修复打包及验证，运行逻辑与已验收的 6.4.8 相同。Tag 不是验收证据。
 
 ## 架构与数据口径
 
@@ -60,7 +60,7 @@ npm test
 
 ## 发布
 
-`npm test` 与 `git diff --check` 通过、宿主安装验证通过后，提交代码并推送与版本一致的 annotated Tag。GitHub Actions 使用 Node 24 先测试、校验 Tag/manifest/package 一致性，再将 **Git 跟踪的文件** 打包并发布 ZIP 与 SHA-256 校验文件。只对版本 Tag 创建正式 Release；手动工作流仅上传构建 Artifact。不将本机 dataDir、node_modules、凭据或未跟踪文件打包。
+`npm test` 与 `git diff --check` 通过、宿主安装验证通过后，提交代码并推送与版本一致的 annotated Tag。GitHub Actions 使用 Node 24 先测试、校验 Tag/manifest/package 一致性，再将 **Git 跟踪的文件** 打包，在临时目录解压后重新执行完整测试，最后发布 ZIP 与 SHA-256 校验文件。只对版本 Tag 创建正式 Release；手动工作流仅上传构建 Artifact。不将本机 dataDir、node_modules、凭据或未跟踪文件打包。
 
 GitHub Release 及工作流成功状态须实际核对；推送 Tag 不代表构建已经成功。
 
