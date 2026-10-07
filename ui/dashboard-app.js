@@ -201,11 +201,8 @@ function updateFilterOpts() {
     });
     lp.innerHTML=ph;
   }
-  if(_allModels || D.modelOptions) {
-    var h='<div class="cs-opt'+(_selModel===""?" sel":"")+'" data-v="">全部模型</div>';
-    var filtered=D.modelOptions||_allModels||[];
-    filtered.forEach(function(m){h+='<div class="cs-opt'+(_selModel===m.id?" sel":"")+'" data-v="'+m.id+'">'+m.id+'</div>'});
-    lm.innerHTML=h;
+  if(Array.isArray(_allModels) || Array.isArray(D.modelOptions)) {
+    lm.innerHTML=window.TokenTrackerModelOptions.renderModelFilterOptions(D.modelOptions,_allModels,_selModel);
   }
 }
 
