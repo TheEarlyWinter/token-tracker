@@ -41,14 +41,14 @@ test('CNY amount stays native and unknown conversion is omitted from totals with
  assert.match(elements['cs-section'].innerHTML,/部分费用/);
  assert.match(elements['cs-section'].innerHTML,/缺少汇率/);
 });
-test('model ranking renders real calls and collapses an entirely unpriced cost column',()=>{
+test('model ranking renders real calls and omits cost columns and notes',()=>{
  const {ctx}=env({models:[{id:'unpriced',totalTokens:200000000,assistantCount:23}],_modelCosts:[{model:'unpriced',cost:0,priced:false}]});
  const title={textContent:''};const list={style:{},innerHTML:'',addEventListener(){}};
  const canvas={style:{},parentElement:{querySelector:()=>title}};
  Object.assign(ctx,{chartColors:()=>({agent:['gray'],doughnut:['gray']}),mc:null,_selAgent:'',_selModel:'',_showDeleted:false,_provRowHtml:'',_modelProv:'',$:id=>id==='mc'?canvas:id==='mc-list'?list:null});
  vm.runInContext(extract('renderModel'),ctx);vm.runInContext('renderModel()',ctx);
  assert.match(list.innerHTML,/23 次/);assert.doesNotMatch(list.innerHTML,/无数据/);
- assert.match(list.innerHTML,/费用占比暂不可用/);assert.doesNotMatch(list.innerHTML,/mr-col-title[^>]*>费用</);
+ assert.doesNotMatch(list.innerHTML,/费用/);
 });
 test('a stale UI version is visible and diagnostic preview identifies both versions',()=>{
  const {ctx}=env({});

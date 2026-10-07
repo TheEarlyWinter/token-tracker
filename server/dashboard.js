@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import vm from "node:vm";
 import { trackerStatus } from "../lib/runtime-health.mjs";
 import { applyDashboardOptions } from "../lib/dashboard-options.mjs";
+import { renderDashboardHtml } from "../lib/dashboard-page.mjs";
 const UI_VERSION = JSON.parse(fs.readFileSync(new URL('../manifest.json', import.meta.url), 'utf8')).version;
 
 // OpenCode Go 官方定价表（opencode.ai/docs/go 校验）
@@ -543,25 +544,15 @@ export default function (app, ctx) {
     return c.json(snap);
   };
 
-  // 兼容直接加载 HTML 路由
+  // 兼容直接加载 HTML 路由（统一模板渲染，解耦版本硬编码）
   const handleDashboardHtml = (c) => {
     const th = c.req.query("hana-theme") || "inherit";
-    return c.html(`<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Token 用量</title>
-<link rel="stylesheet" href="/api/apps/token-tracker/ui/base.css">
-<link rel="stylesheet" href="/api/apps/token-tracker/ui/theme.css">
-<script src="/api/apps/token-tracker/ui/vendor/chart.umd.min.js"></script>
-</head>
-<body data-hana-theme="${esc(th)}" data-surface="page" data-ui-version="${esc(UI_VERSION)}">
-<div id="app">正在加载 Token 用量看板…</div>
-<script src="/api/apps/token-tracker/ui/model-filter-options.js"></script>
-<script type="module" src="/api/apps/token-tracker/ui/bootstrap.js"></script>
-</body>
-</html>`);
+    return c.html(renderDashboardHtml({
+      version: UI_VERSION,
+      theme: th,
+      basePath: "/api/apps/token-tracker/ui",
+      standalone: true,
+    }));
   };
 
   // 路由挂载（同时兼容 /dashboard/* 与标准根路由）
@@ -590,6 +581,8 @@ export default function (app, ctx) {
   app.get("/widget/data", handleWidgetData);
 
   app.get("/dashboard", handleDashboardHtml);
+  app.get("/dashboard-v:version.html", handleDashboardHtml);
+  app.get("/ui/dashboard-v:version.html", handleDashboardHtml);
 }
 
 // ─── 数据聚合与统计逻辑 ───

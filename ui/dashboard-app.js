@@ -228,17 +228,11 @@ $("app").innerHTML =
   '<span class="cs" id="sm"><span class="cs-txt">模型</span><span class="cs-arw">▾</span><div class="cs-list"></div></span>'+
   '<span class="cs" id="stype"><span class="cs-txt">类型</span><span class="cs-arw">▾</span><div class="cs-list"><div class="cs-opt sel" data-v="">全部</div><div class="cs-opt" data-v="desktop">聊天</div><div class="cs-opt" data-v="channel">频道</div></div></span>'+
   '</div>'+
-  '<div class="sidebar-divider"></div>'+
-  '<div class="sidebar-section sidebar-balance">'+
-  '<div class="sidebar-label">余额</div>'+
-  '<span class="cs sb-picker" id="sb-picker"><span class="cs-txt" id="sb-name">DeepSeek</span><span class="cs-arw">▾</span><div class="cs-list" id="sb-list"></div></span>'+
-  '<div id="sb-display" class="sb-card">—</div>'+
-  '<div id="fx" class="fx-side">—</div>'+
-  '</div>'+
+  '<div id="fx" class="fx-side" style="display:none"></div>'+
   '</div>'+
   '<div class="main-area">'+
   '<div class="archive-intro"><span>PERSONAL USAGE ARCHIVE / 01</span><p>把每一次调用，放回工作流里看。</p></div>'+
-  '<div class="hdr"><div class="hdr-left"><span class="hdr-title">用量</span><span id="lu">—</span></div><div id="hdrQuota" class="hdr-quota"></div><div class="hdr-right"><button class="btn-icon" id="rf" title="刷新数据"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button><button class="btn-icon" id="cur-btn" title="切换展示币种">¥</button><button class="btn-icon" id="th-btn" title="切换深色模式"></button><button class="btn-icon" id="st-btn" title="设置"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button><span class="unit-hint" id="uh">ⓘ</span></div></div>'+
+  '<div class="hdr"><div class="hdr-left"><span class="hdr-title">用量</span><span id="lu">—</span></div><div id="hdrQuota" class="hdr-quota"></div><div class="hdr-right"><button class="btn-icon" id="rf" title="刷新数据"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button><button class="btn-icon" id="th-btn" title="切换深色模式"></button><button class="btn-icon" id="st-btn" title="设置"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button><span class="unit-hint" id="uh">ⓘ</span></div></div>'+
   '<details id="runtime-health" class="runtime-health"><summary id="health-summary">运行状态 · 尚未取得检查结果</summary><div id="health-details"></div><details class="metric-help"><summary>指标与采集范围说明</summary><p>首响：请求发出至 provider 响应元数据到达，不是真正的首 token TTFT。</p><p>速度：输出 token ÷ 完整请求时长，包含等待；优先实时请求计量，无有效实时样本时使用同模型最近 8 条有效账本时长回退，不是流式瞬时速度。</p><p>胶囊缓存率：本会话当前模型最近 50 条记录，按 token 体量加权；看板缓存率维持缓存读 token ÷ 当前筛选范围总 token 的既有口径。</p><p>费用为估算，与供应商账单可能不同。余额查询时间不代表用量同步时间。</p><p id="coverage-help"></p></details><details class="diagnostic-preview"><summary>查看诊断摘要</summary><pre id="diagnostic-text"></pre><button class="btn" id="copy-diagnostic">复制诊断摘要</button><span id="copy-result" role="status"></span><p>仅复制已预览的摘要，不会自动上传。</p></details></details>'+
   '<div id="cards" class="cg"></div>'+
   '<div id="media-section" style="display:none"></div>'+
@@ -248,11 +242,10 @@ $("app").innerHTML =
   '<div class="cx"><div class="ct">Agent 消耗对比</div><canvas id="ac"></canvas></div></div>'+
   '</div></div>'+
   '<div id="sub-quota-section" style="display:none"></div>'+
-  '<div id="cs-section" style="display:none"></div>'+
   '<div id="ld" class="ld">翻阅档案…</div>'+
   '</div>'+
   '</div>'+
-  '<div class="set-shade" id="set-shade" style="display:none"></div><div class="set-panel" id="set-panel" style="display:none"><div class="set-hdr"><span>设置</span><div style="display:flex;gap:8px;align-items:center"><button class="btn" id="set-save">保存</button><button class="btn" id="set-close">✕</button></div></div><div class="set-body"><div class="set-sec"><div class="set-sec-title">外观</div><div class="set-theme-row" id="set-theme"><button class="set-theme-opt" data-v="auto">跟随系统</button><button class="set-theme-opt" data-v="light">浅色</button><button class="set-theme-opt" data-v="dark">深色</button></div></div><div class="set-sec"><div class="set-sec-title">余额查询 API</div><div id="set-bal-apis" class="set-prov-list"></div></div><div class="set-sec"><div class="set-sec-title">模型定价</div><div id="set-prices" class="set-prov-list"></div></div></div></div>'+
+  '<div class="set-shade" id="set-shade" style="display:none"></div><div class="set-panel" id="set-panel" style="display:none"><div class="set-hdr"><span>设置</span><div style="display:flex;gap:8px;align-items:center"><button class="btn" id="set-save">保存</button><button class="btn" id="set-close">✕</button></div></div><div class="set-body"><div class="set-sec"><div class="set-sec-title">外观</div><div class="set-theme-row" id="set-theme"><button class="set-theme-opt" data-v="auto">跟随系统</button><button class="set-theme-opt" data-v="light">浅色</button><button class="set-theme-opt" data-v="dark">深色</button></div></div></div></div>'+
   '<div id="modal" class="modal" style="display:none"><div class="modal-bg"></div><div class="modal-box"><div class="modal-hdr"><span class="modal-tit">对话详情</span><button class="btn" onclick="document.getElementById(\'modal\').style.display=\'none\'">✕</button></div><div class="modal-body" id="modal-body"></div></div></div>';
 
 function load(refreshFirst) {
@@ -371,7 +364,6 @@ function render() {
   renderTrend();
   renderModel();
   renderAgent();
-  renderConsumption();
   renderBalance();
   renderSubscriptionQuotas();
 }
@@ -648,7 +640,7 @@ function renderModel() {
   if (smv && !_selAgent) {
     var ag=!D.agents?null:D.agents; if(!ag||!ag.length){emptyRank();return;}
     title = "Agent 占比";
-    items = ag.map(function(a,i){var n=(D.agentNames||{})[a.id]||a.id;if(a.deleted)n+='（历史 Agent）';return{label:n,tokens:a.totalTokens,count:a.assistantCount||0,cost:0,color:cc.agent[i%cc.agent.length]};});
+    items = ag.map(function(a,i){var n=(D.agentNames||{})[a.id]||a.id;if(a.deleted)n+='（历史 Agent）';return{label:n,tokens:a.totalTokens,count:a.assistantCount||0,color:cc.agent[i%cc.agent.length]};});
   } else if (D.providerBreakdown && D.providerBreakdown.length) {
     // 供应商选择分类（卡内筛选，仅影响模型占比视图）
     var provs=[], seenP={};
@@ -656,12 +648,9 @@ function renderModel() {
     if(_modelProv && !seenP[_modelProv]) _modelProv="";
     var pbd = _modelProv ? D.providerBreakdown.filter(function(p){return p.provider===_modelProv;}) : D.providerBreakdown;
     var pLabels = pbd.map(function(p){return modelLabel(p.model);});
-    var costMap={}, countMap={};
-    // 1) opencode-go 官方费用/次数优先（真实计费数据，仅 opencode 有官方账单）
-    if(D._subscriptionQuotas){for(var oi=0;oi<D._subscriptionQuotas.length;oi++){var ogq=D._subscriptionQuotas[oi];if(ogq&&ogq.modelSummary){for(var oj=0;oj<ogq.modelSummary.length;oj++){var msm=ogq.modelSummary[oj];if(msm&&msm.model){costMap[msm.model]=(msm.costUsd||0);countMap[msm.model]=(msm.count||0);}}}}}
-    // 2) 非 opencode 模型：费用从价格表估算（未配置时为 0），次数用本地扫描 count
-    if(D._modelCosts){for(var mi2=0;mi2<D._modelCosts.length;mi2++){var mmc=D._modelCosts[mi2];if(mmc&&mmc.model&&!costMap[mmc.model])costMap[mmc.model]=toUsd(mmc.cost,mmc.currency)||0;}}
-    items = pbd.map(function(p,i){return{label:pLabels[i],tokens:p.totalTokens||0,count:countMap[p.model]!==undefined?countMap[p.model]:(p.count||0),cost:costMap[p.model]||0,color:cc.doughnut[i%cc.doughnut.length]};});
+    var countMap={};
+    if(D._subscriptionQuotas){for(var oi=0;oi<D._subscriptionQuotas.length;oi++){var ogq=D._subscriptionQuotas[oi];if(ogq&&ogq.modelSummary){for(var oj=0;oj<ogq.modelSummary.length;oj++){var msm=ogq.modelSummary[oj];if(msm&&msm.model){countMap[msm.model]=(msm.count||0);}}}}}
+    items = pbd.map(function(p,i){return{label:pLabels[i],tokens:p.totalTokens||0,count:countMap[p.model]!==undefined?countMap[p.model]:(p.count||0),color:cc.doughnut[i%cc.doughnut.length]};});
     // 卡内供应商筛选行（始终展示，供应商即分类）
     var provRow='<div class="mr-prov-row"><button data-p="" class="'+( _modelProv===""?"on":"")+'">全部</button>';
     for(var pj=0;pj<provs.length;pj++){
@@ -672,14 +661,13 @@ function renderModel() {
   } else {
     var m=(D.models||[]).filter(function(md){return md.id!=="unknown"||md.totalTokens>0;}); if(!m.length){emptyRank();return;}
     items = m.map(function(md,i){
-      var cost=(D._modelCosts||[]).find(function(c){return c.model===md.id;});
-      return{label:modelLabel(md.id),tokens:md.totalTokens||0,count:md.assistantCount||0,cost:cost?toUsd(cost.cost,cost.currency):0,color:cc.doughnut[i%cc.doughnut.length]};
+      return{label:modelLabel(md.id),tokens:md.totalTokens||0,count:md.assistantCount||0,color:cc.doughnut[i%cc.doughnut.length]};
     });
   }
   var ctEl=$("mc").parentElement.querySelector(".ct");
   ctEl.textContent=title;
 
-  // 三栏独立排行：Token / 次数 / 费用
+  // 双栏独立排行：Token / 次数
   var TOP=8;
   function rankBy(fn, valFn, fmtFn, hasFn){
     var arr=items.filter(hasFn).slice().sort(function(a,b){return fn(b)-fn(a);}).slice(0,TOP);
@@ -699,14 +687,11 @@ function renderModel() {
   }
   var colToken=rankBy(function(it){return it.tokens||0;},null,function(v){return fmtAxis(v);},function(it){return (it.tokens||0)>0;});
   var colCount=rankBy(function(it){return it.count||0;},null,function(v){return fmt(v)+" 次";},function(it){return (it.count||0)>0;});
-  var colCost=rankBy(function(it){return it.cost||0;},null,function(v){return dual(v);},function(it){return (it.cost||0)>0;});
 
-  var html=(_provRowHtml||"")+'<div class="mr-cols" style="--rank-columns:'+(1+(colCount.empty?0:1)+(colCost.empty?0:1))+'">';
+  var html=(_provRowHtml||"")+'<div class="mr-cols" style="--rank-columns:'+(1+(colCount.empty?0:1))+'">';
   html+='<div class="mr-col"><div class="mr-col-title">Token</div>'+(colToken.html||'<div class="mr-col-empty">无数据</div>')+'</div>';
   if(!colCount.empty)html+='<div class="mr-col"><div class="mr-col-title">次数</div>'+colCount.html+'</div>';
-  if(!colCost.empty)html+='<div class="mr-col"><div class="mr-col-title" title="仅包含可换算且已有价格的估算费用">费用</div>'+colCost.html+'</div>';
   html+='</div>';
-  if(colCost.empty)html+='<div class="rank-note">费用占比暂不可用：尚无可用定价或换算数据。</div>';
   if(colCount.empty)html+='<div class="rank-note">当前范围暂无调用次数记录。</div>';
   if(unattributed)html+='<div class="rank-note">另有 '+unattributed+' 次调用未标注模型，已包含于总览，不作为已配置模型展示。</div>';
   listEl.innerHTML=html;
@@ -740,36 +725,6 @@ function renderAgent() {
 }
 
 function renderBalance(){
-  var sbList=$("sb-list"),sbName=$("sb-name"),sbDisplay=$("sb-display");
-  if(!sbList||!sbName||!sbDisplay)return;
-  var allBal=D._balances||[];
-  var hasData=allBal.filter(function(b){return b.type==='money'||b.type==='quota';});
-  var picks=hasData.length?hasData:allBal;
-  if(!picks.length){sbDisplay.textContent="无数据";sbList.innerHTML='';return;}
-  var found=false;
-  for(var i=0;i<picks.length;i++){if(picks[i].provider===_selBalance||picks[i].provider.toLowerCase()===_selBalance.toLowerCase()){_selBalance=picks[i].provider;found=true;break;}}
-  if(!found)_selBalance=picks[0].provider;
-  var curBal=null;
-  for(var i=0;i<picks.length;i++){if(picks[i].provider===_selBalance){curBal=picks[i];break;}}
-  var listHtml='';
-  for(var i=0;i<picks.length;i++){
-    var p=picks[i];
-    var sel=(p.provider===_selBalance)?' sel':'';
-    listHtml+='<div class="cs-opt'+sel+'" data-v="'+escHTML(p.provider)+'">'+escHTML(_pn(p.provider))+'</div>';
-  }
-  sbList.innerHTML=listHtml;
-  sbName.textContent=_pn(curBal?curBal.provider:_selBalance);
-  if(curBal&&(curBal.type==='money'||curBal.type==='quota')){
-    var warn=curBal.type==='money'&&curBal.total<=10;
-    sbDisplay.className='sb-card'+(warn?' sb-warn':'');
-    sbDisplay.innerHTML='<div class="sb-val">'+escHTML(curBal.display)+'</div>'+(curBal.type==='quota'&&curBal.remain!==undefined?'<div class="sb-bar"><div class="sb-bar-fill" style="width:'+curBal.remain+'%"></div></div>':'')+(curBal.details&&curBal.details.length>1?'<div class="sb-sub">'+curBal.details.map(function(d){return escHTML(d.label)+' ¥'+d.amount.toFixed(2);}).join(' · ')+'</div>':'');
-  }else if(curBal){
-    sbDisplay.className='sb-card sb-muted';
-    sbDisplay.innerHTML='<div class="sb-val sm">'+escHTML(curBal.display||'无数据')+'</div>';
-  }else{
-    sbDisplay.className='sb-card sb-muted';
-    sbDisplay.textContent='无数据';
-  }
 }
 
 function fmtReset(sec){
@@ -951,95 +906,35 @@ function renderConsumption(){
   if(!costs.length){var cs=$("cs-section");if(cs)cs.style.display="none";return;}
   var hasCost=false, hasKnownCost=false, incomplete=false;
   for(var i=0;i<costs.length;i++){if(costs[i].cost>0)hasCost=true;if(costs[i].priced!==false && toUsd(costs[i].cost,costs[i].currency)!==null)hasKnownCost=true;if(costs[i].priced===false || toUsd(costs[i].cost,costs[i].currency)===null)incomplete=true;}
-  var pt=D._priceTable||{};
   var total=0;
   for(var i=0;i<costs.length;i++){if(costs[i].cost>0){total+=toUsd(costs[i].cost,costs[i].currency);}}
   var displayTotal=total;
   var h='<div class="cs-wrap"><div class="cs-title">消费明细</div>';
   h+='<div class="cs-table"><div class="cs-th"><span class="ct-c1">模型</span><span class="ct-n">输入 tok</span><span class="ct-n">输出 tok</span><span class="ct-n">缓存 tok</span><span class="ct-a">费用</span></div>';
 
-  // 检查是否有特殊时段（跳过覆盖全天的 slot）
-  var hasSlots=false;
-  for(var pk2 in pt){var e2=pt[pk2];if(e2&&e2.slots&&e2.slots.length){for(var si=0;si<e2.slots.length;si++){var s=e2.slots[si];var f=s.from.split(':').map(Number),t=s.to.split(':').map(Number);if(!(f[0]*60+(f[1]||0)===0&&t[0]*60+(t[1]||0)===1440)){hasSlots=true;break;}}}}
-
   var modelInfo={};
   for(var mi=0;mi<(D.models||[]).length;mi++){var m2=D.models[mi];modelInfo[m2.id]={totalTokens:m2.totalTokens||0,tokIn:m2.input||0,tokOut:m2.output||0,tokCache:m2.cacheRead||0,tokCacheW:m2.cacheWrite||0};}
 
-  // slot 模型列表
-  var slotModels=[];
-  if(hasSlots&&D.hourly&&D.hourly.length>0){
-    for(var pk2 in pt){var e2=pt[pk2];if(e2&&e2.slots&&e2.slots.length&&e2.defaultPrice){slotModels.push({key:pk2,entry:e2});}}
-  }
-  var slotModelUsd=0;
-  for(var ci=0;ci<costs.length;ci++){var cc=costs[ci];if(cc.cost>0){for(var sji=0;sji<slotModels.length;sji++){if(slotModels[sji].key.split('/').pop()===cc.model){slotModelUsd+=toUsd(cc.cost,cc.currency);break;}}}}
-
-  // 计算每个模型的时段拆分（有 slot 时）
-  function slotSplit(mId, entry){
-    var info=modelInfo[mId];
-    if(!info)return null;
-    var sTok=0,nTok=0;
-    for(var hi=0;hi<D.hourly.length;hi++){
-      var hh=D.hourly[hi];
-      var mt=hh.models&&hh.models[mId];
-      if(!mt||!mt.totalTokens)continue;
-      var cur2=parseInt(hh.hour)*60+30;
-      var inSlot2=false;
-      for(var sj=0;sj<entry.slots.length;sj++){
-        var s3=entry.slots[sj];
-        var f3=s3.from.split(':').map(Number),t3=s3.to.split(':').map(Number);
-        var fs3=f3[0]*60+(f3[1]||0),ts3=t3[0]*60+(t3[1]||0);
-        if(fs3===0&&ts3===1440)continue;
-        if(fs3<=ts3){if(cur2>=fs3&&cur2<ts3)inSlot2=true;}
-        else{if(cur2>=fs3||cur2<ts3)inSlot2=true;}
-        if(inSlot2)break;
-      }
-      if(inSlot2)sTok+=mt.totalTokens;else nTok+=mt.totalTokens;
-    }
-    if(sTok+nTok<=0)return null;
-    var ratioS=sTok/(sTok+nTok),ratioN=nTok/(sTok+nTok);
-    var dp3=entry.defaultPrice||{};
-    var slotP=null;
-    for(var sj2=0;sj2<entry.slots.length;sj2++){var s4=entry.slots[sj2];var f4=s4.from.split(':').map(Number),t4=s4.to.split(':').map(Number);if(!(f4[0]*60+(f4[1]||0)===0&&t4[0]*60+(t4[1]||0)===1440)){slotP=s4;break;}}
-    if(!slotP)return null;
-    var curM=entry.currency||"USD";
-    var sIn=info.tokIn*ratioS,sOut=info.tokOut*ratioS,sCache=info.tokCache*ratioS,sCacheW=info.tokCacheW*ratioS;
-    var nIn=info.tokIn*ratioN,nOut=info.tokOut*ratioN,nCache=info.tokCache*ratioN,nCacheW=info.tokCacheW*ratioN;
-    var sAmt=sIn*(slotP.inputPerM||0)/1e6+sCache*(slotP.inputCachePerM||0)/1e6+sCacheW*(slotP.cacheWritePerM||0)/1e6+sOut*(slotP.outputPerM||0)/1e6;
-    var nAmt=nIn*(dp3.inputPerM||0)/1e6+nCache*(dp3.inputCachePerM||0)/1e6+nCacheW*(dp3.cacheWritePerM||0)/1e6+nOut*(dp3.outputPerM||0)/1e6;
-    return { sIn:sIn,sOut:sOut,sCache:sCache,nIn:nIn,nOut:nOut,nCache:nCache,sAmt:sAmt,nAmt:nAmt,curM:curM };
-  }
-
-  var slotTotalUsd=0, nonSlotTotalUsd=0;
+  var nonSlotTotalUsd=0;
   for(var i=0;i<costs.length;i++){
     var c=costs[i];
     if(!((c.totalTokens || modelInfo[c.model]?.totalTokens || 0)>0) && !(c.callCount>0) && !(c.cost>0))continue;
     var curM=c.currency||"USD";
     if(c.model==="unknown" && !(c.totalTokens>0) && !(c.cost>0))continue;
     var label=modelLabel(c.model);
-    var isSlot=false, split=null;
-    for(var sj3=0;sj3<slotModels.length;sj3++){if(slotModels[sj3].key.split('/').pop()===c.model){isSlot=true;split=slotSplit(c.model,slotModels[sj3].entry);break;}}
-    if(isSlot&&split){
-      // 时段拆分行 + 高峰/非高峰子行
-      slotTotalUsd+=toUsd(split.sAmt,split.curM)+toUsd(split.nAmt,split.curM);
-      h+='<div class="cs-tr"><span class="ct-c1">'+escHTML(label)+'<span class="ct-cur">'+(split.curM==="CNY"?"人民币":"美元")+'</span></span><span class="ct-n">'+Math.round(split.sIn+split.nIn).toLocaleString()+'</span><span class="ct-n">'+Math.round(split.sOut+split.nOut).toLocaleString()+'</span><span class="ct-n">'+Math.round(split.sCache+split.nCache).toLocaleString()+'</span><span class="ct-a">'+dualByCur(split.sAmt+split.nAmt,split.curM)+'</span></div>';
-      h+='<div class="cs-tr cs-tr-sub"><span class="ct-c1 ct-c1-sub">高峰</span><span class="ct-n">'+Math.round(split.sIn).toLocaleString()+'</span><span class="ct-n">'+Math.round(split.sOut).toLocaleString()+'</span><span class="ct-n">'+Math.round(split.sCache).toLocaleString()+'</span><span class="ct-a">'+dualByCur(split.sAmt,split.curM)+'</span></div>';
-      h+='<div class="cs-tr cs-tr-sub"><span class="ct-c1 ct-c1-sub">常规</span><span class="ct-n">'+Math.round(split.nIn).toLocaleString()+'</span><span class="ct-n">'+Math.round(split.nOut).toLocaleString()+'</span><span class="ct-n">'+Math.round(split.nCache).toLocaleString()+'</span><span class="ct-a">'+dualByCur(split.nAmt,split.curM)+'</span></div>';
-    }else{
-      // 普通模型单行
-      nonSlotTotalUsd+=toUsd(c.cost,c.currency);
-      var tokIn=0,tokOut=0,tokCache=0;
-      var info2=modelInfo[c.model];
-      if(c.costSource==='official'){
-        if(c.officialInputTokens!=null || c.officialOutputTokens!=null){tokIn=c.officialInputTokens;tokOut=c.officialOutputTokens;tokCache=null;}
-        else{tokIn=null;tokOut=null;tokCache=null;}
-      }else if(info2){tokIn=info2.tokIn;tokOut=info2.tokOut;tokCache=info2.tokCache;}
-      var fmtTokCell=function(v){return v==null?'—':v.toLocaleString();};
-      h+='<div class="cs-tr"><span class="ct-c1">'+escHTML(label)+'<span class="ct-cur">'+(curM==="CNY"?"人民币":"美元")+'</span></span><span class="ct-n">'+fmtTokCell(tokIn)+'</span><span class="ct-n">'+fmtTokCell(tokOut)+'</span><span class="ct-n">'+fmtTokCell(tokCache)+'</span><span class="ct-a">'+(c.priced===false?'<span title="未配置价格，不能推断为免费">—（未定价）</span>':dualByCur(c.cost,curM))+'</span></div>';
-    }
+    nonSlotTotalUsd+=toUsd(c.cost,c.currency);
+    var tokIn=0,tokOut=0,tokCache=0;
+    var info2=modelInfo[c.model];
+    if(c.costSource==='official'){
+      if(c.officialInputTokens!=null || c.officialOutputTokens!=null){tokIn=c.officialInputTokens;tokOut=c.officialOutputTokens;tokCache=null;}
+      else{tokIn=null;tokOut=null;tokCache=null;}
+    }else if(info2){tokIn=info2.tokIn;tokOut=info2.tokOut;tokCache=info2.tokCache;}
+    var fmtTokCell=function(v){return v==null?'—':v.toLocaleString();};
+    h+='<div class="cs-tr"><span class="ct-c1">'+escHTML(label)+'<span class="ct-cur">'+(curM==="CNY"?"人民币":"美元")+'</span></span><span class="ct-n">'+fmtTokCell(tokIn)+'</span><span class="ct-n">'+fmtTokCell(tokOut)+'</span><span class="ct-n">'+fmtTokCell(tokCache)+'</span><span class="ct-a">'+(c.priced===false?'<span title="未配置价格，不能推断为免费">—（未定价）</span>':dualByCur(c.cost,curM))+'</span></div>';
   }
-  displayTotal=slotTotalUsd+nonSlotTotalUsd;
+  displayTotal=nonSlotTotalUsd;
   h+='<div class="cs-total-row"><span class="ct-c1">合计'+(incomplete?'（部分费用）':'')+'</span><span class="ct-n"></span><span class="ct-n"></span><span class="ct-n"></span><span class="ct-a">'+(hasKnownCost?dual(displayTotal):'—')+'</span></div>';
-  h+='</div><div class="rank-note">费用为价格表估算，与供应商账单可能不同。'+(incomplete?'未定价及缺少汇率的费用不计入合计。':'')+'</div></div>';
+  h+='</div><div class="rank-note">费用为估算，与供应商账单可能不同。'+(incomplete?'未定价及缺少汇率的费用不计入合计。':'')+'</div></div>';
   var el=$("cs-section");
   if(el){el.innerHTML=h;el.style.display="";}
 }
@@ -1098,102 +993,9 @@ function escHTML(s){if(!s)return'';return String(s).replace(/&/g,"&amp;").replac
 $("rf").onclick = refresh;
 (function(){
   var btn=$("st-btn"),panel=$("set-panel"),shade=$("set-shade"),close=$("set-close"),save=$("set-save");
-  function getProvidersFromData(){
-    var seen={},list=[];
-    if(_allProviders){for(var i=0;i<_allProviders.length;i++){var p=_allProviders[i].provider;if(!seen[p]){seen[p]=true;list.push(p);}}}
-    return list;
-  }
   function openSet(){
     _dispCur = getDispCur();
     syncThemeUI(document.body.getAttribute("data-theme")==="dark"?"dark":"light", getThemeMode());
-    var balApis=D&&D._balanceApis?D._balanceApis:{};
-    var bhtml='';
-    var balKeys=Object.keys(balApis);
-    if(balKeys.length){
-      for(var i=0;i<balKeys.length;i++){
-        var p=balKeys[i];
-        var api=balApis[p]||{url:""};
-        bhtml+='<div class="set-ba-row"><span class="set-ba-key">'+escHTML(p)+'</span>';
-        if(api.responseType==="opencode-go"){
-          bhtml+='<div class="set-og-fields">'+
-            '<input class="set-ba-inp" data-field="workspaceId" placeholder="workspace id（wrk_...）" value="'+escHTML(api.workspaceId||"")+'">'+
-            '<input class="set-ba-inp" data-field="cookie" placeholder="auth cookie（DevTools → Application → Cookies → opencode.ai → auth）" value="'+escHTML(api.cookie||"")+'">'+
-            '<label class="tg og-tg"><input type="checkbox" data-field="enabled"'+(api.enabled?" checked":"")+'><span class="tg-slider"></span><span class="tg-label">启用</span></label>'+
-            '</div>';
-        }else{
-          bhtml+='<input class="set-ba-inp" data-prov="'+escHTML(p)+'" data-field="url" placeholder="余额查询URL（留空则不查询）" value="'+escHTML(api.url||"")+'">';
-        }
-        bhtml+='</div>';
-      }
-    }else{
-      bhtml='<div style="font-size:13px;color:var(--text-tertiary)">暂无配置</div>';
-    }
-    var el0=$("set-bal-apis");if(el0)el0.innerHTML=bhtml;
-    var pt=D&&D._priceTable?D._priceTable:{};
-    var priceHtml='';
-    priceHtml+='<div class="set-add-row"><input class="set-add-inp" id="set-ak" placeholder="输入 provider/model，如 deepseek/deepseek-chat"><button class="btn" id="set-ak-btn">添加</button></div>';
-    priceHtml+='<div class="set-price-hdr"><span class="set-price-col">供应商/模型</span><span class="set-price-col">计费方式</span><span class="set-price-col">价格</span></div>';
-    var renderedKeys={};
-    function addPriceRow(mk,p2){
-      if(renderedKeys[mk])return;
-      renderedKeys[mk]=true;
-      var dp=p2.defaultPrice||{inputPerM:p2.inputPerM||0,inputCachePerM:p2.inputCachePerM||0,outputPerM:p2.outputPerM||0,unit:p2.unit||"token",pricePerCall:p2.pricePerCall||0,pricePer10K:p2.pricePer10K||0};
-      var slots=p2.slots||[];
-      var ek=escHTML(mk);
-      var curSym='$';
-      var curTag='美元计费';
-      var allowTag=(p2.monthlyAllowance||0)>0?'<span class="set-cur-tag set-allow-tag">额度 $'+(p2.monthlyAllowance||0)+'/月</span>':'';
-      priceHtml+='<div class="set-model-card" data-key="'+ek+'"><div class="set-model-hdr"><span>'+ek+'</span>'+allowTag+'<span class="set-cur-tag">'+curTag+'</span><button class="set-model-del" data-key="'+ek+'">✕</button></div>';
-      priceHtml+='<div class="set-dflt-label">通用价格（非特殊时段）</div><div class="set-slot-price">';
-      var du=dp.unit||"token";
-      priceHtml+='<select class="set-dflt-sel" data-key="'+ek+'" data-f="unit"><option value="token"'+(du==="token"?" selected":"")+'>按Token</option><option value="per_call"'+(du==="per_call"?" selected":"")+'>按次</option><option value="per_char"'+(du==="per_char"?" selected":"")+'>按字符</option></select>';
-      if(du==="per_call"){
-        priceHtml+='<input class="set-price-inp" data-key="'+ek+'" data-f="pricePerCall" type="number" step="0.001" min="0" value="'+(dp.pricePerCall||0)+'" placeholder="'+curSym+'/次">';
-      }else if(du==="per_char"){
-        priceHtml+='<input class="set-price-inp" data-key="'+ek+'" data-f="pricePer10K" type="number" step="0.01" min="0" value="'+(dp.pricePer10K||0)+'" placeholder="'+curSym+'/万字符">';
-      }else{
-        priceHtml+='<input class="set-price-inp" data-key="'+ek+'" data-f="inputPerM" type="number" step="0.01" min="0" value="'+(dp.inputPerM||0)+'" placeholder="'+curSym+'/M·输入"><input class="set-price-inp" data-key="'+ek+'" data-f="inputCachePerM" type="number" step="0.01" min="0" value="'+(dp.inputCachePerM||0)+'" placeholder="'+curSym+'/M·缓存"><input class="set-price-inp" data-key="'+ek+'" data-f="outputPerM" type="number" step="0.01" min="0" value="'+(dp.outputPerM||0)+'" placeholder="'+curSym+'/M·输出"><input class="set-price-inp" data-key="'+ek+'" data-f="cacheWritePerM" type="number" step="0.01" min="0" value="'+(dp.cacheWritePerM||0)+'" placeholder="'+curSym+'/M·缓存写">';
-      }
-      priceHtml+='</div>';
-      // 长上下文档位（官方分档价，如 Luna >272K、Qwen >256K）
-      var tiers=p2.contextTiers||[];
-      if(tiers.length>0){
-        priceHtml+='<div class="set-slots-label">长上下文档位（单次输入超过阈值用该档）</div>';
-        for(var ti=0;ti<tiers.length;ti++){
-          var tier=tiers[ti];
-          var tp=tier.price||{};
-          priceHtml+='<div class="set-slot set-tier"><div class="set-slot-time"><span class="set-ti-sep">输入 &gt;</span><input class="set-ti set-ti-max" data-key="'+ek+'" data-f="maxContext" type="number" step="1000" min="0" value="'+(tier.maxContext||0)+'" placeholder="阈值"><span class="set-ti-sep">tokens</span><button class="set-slot-del" data-key="'+ek+'" data-tier="'+ti+'">✕</button></div><div class="set-slot-price">';
-          priceHtml+='<input class="set-price-inp" data-key="'+ek+'" data-f="inputPerM" type="number" step="0.01" min="0" value="'+(tp.inputPerM||0)+'" placeholder="'+curSym+'/M·输入"><input class="set-price-inp" data-key="'+ek+'" data-f="inputCachePerM" type="number" step="0.01" min="0" value="'+(tp.inputCachePerM||0)+'" placeholder="'+curSym+'/M·缓存"><input class="set-price-inp" data-key="'+ek+'" data-f="outputPerM" type="number" step="0.01" min="0" value="'+(tp.outputPerM||0)+'" placeholder="'+curSym+'/M·输出"><input class="set-price-inp" data-key="'+ek+'" data-f="cacheWritePerM" type="number" step="0.01" min="0" value="'+(tp.cacheWritePerM||0)+'" placeholder="'+curSym+'/M·缓存写">';
-          priceHtml+='</div></div>';
-        }
-        priceHtml+='<button class="set-slot-add set-tier-add" data-key="'+ek+'">+ 添加长上下文档位</button>';
-      }
-      if(slots.length>0){
-        priceHtml+='<div class="set-slots-label">特殊时间段</div>';
-        for(var si=0;si<slots.length;si++){
-          var s=slots[si];
-          var u=s.unit||du||"token";
-          priceHtml+='<div class="set-slot"><div class="set-slot-time"><button class="set-ti-btn" data-key="'+ek+'" data-si="'+si+'" data-f="from" data-d="-30">−</button><input class="set-ti" data-key="'+ek+'" data-si="'+si+'" data-f="from" value="'+escHTML(s.from||"09:00")+'" placeholder="起始"><button class="set-ti-btn" data-key="'+ek+'" data-si="'+si+'" data-f="from" data-d="30">+</button><span class="set-ti-sep">至</span><button class="set-ti-btn" data-key="'+ek+'" data-si="'+si+'" data-f="to" data-d="-30">−</button><input class="set-ti" data-key="'+ek+'" data-si="'+si+'" data-f="to" value="'+escHTML(s.to||"18:00")+'" placeholder="结束"><button class="set-ti-btn" data-key="'+ek+'" data-si="'+si+'" data-f="to" data-d="30">+</button><button class="set-slot-del" data-key="'+ek+'" data-si="'+si+'">✕</button></div><div class="set-slot-price">';
-          priceHtml+='<select class="set-price-sel" data-key="'+ek+'" data-si="'+si+'" data-f="unit"><option value="token"'+(u==="token"?" selected":"")+'>按Token</option><option value="per_call"'+(u==="per_call"?" selected":"")+'>按次</option><option value="per_char"'+(u==="per_char"?" selected":"")+'>按字符</option></select>';
-          if(u==="per_call"){
-            priceHtml+='<input class="set-price-inp" data-key="'+ek+'" data-si="'+si+'" data-f="pricePerCall" type="number" step="0.001" min="0" value="'+(s.pricePerCall||0)+'" placeholder="'+curSym+'/次">';
-          }else if(u==="per_char"){
-            priceHtml+='<input class="set-price-inp" data-key="'+ek+'" data-si="'+si+'" data-f="pricePer10K" type="number" step="0.01" min="0" value="'+(s.pricePer10K||0)+'" placeholder="'+curSym+'/万字符">';
-          }else{
-            priceHtml+='<input class="set-price-inp" data-key="'+ek+'" data-si="'+si+'" data-f="inputPerM" type="number" step="0.01" min="0" value="'+(s.inputPerM||0)+'" placeholder="'+curSym+'/M·输入"><input class="set-price-inp" data-key="'+ek+'" data-si="'+si+'" data-f="inputCachePerM" type="number" step="0.01" min="0" value="'+(s.inputCachePerM||0)+'" placeholder="'+curSym+'/M·缓存"><input class="set-price-inp" data-key="'+ek+'" data-si="'+si+'" data-f="outputPerM" type="number" step="0.01" min="0" value="'+(s.outputPerM||0)+'" placeholder="'+curSym+'/M·输出"><input class="set-price-inp" data-key="'+ek+'" data-si="'+si+'" data-f="cacheWritePerM" type="number" step="0.01" min="0" value="'+(s.cacheWritePerM||0)+'" placeholder="'+curSym+'/M·缓存写">';
-          }
-          priceHtml+='</div></div>';
-        }
-      }
-      priceHtml+='<button class="set-slot-add" data-key="'+ek+'">+ 添加特殊时间段</button></div>';
-    }
-    var ptKeys=Object.keys(pt);
-    if(ptKeys.length){
-      for(var i=0;i<ptKeys.length;i++)addPriceRow(ptKeys[i],pt[ptKeys[i]]);
-    }else{
-      priceHtml+='<div class="set-empty">暂无配置，在上方输入模型名后点击添加</div>';
-    }
-    var el3=$("set-prices");if(el3)el3.innerHTML=priceHtml;
     if(shade)shade.style.display="";
     if(panel)panel.style.display="";
   }
@@ -1201,206 +1003,23 @@ $("rf").onclick = refresh;
     if(shade)shade.style.display="none";
     if(panel)panel.style.display="none";
   }
-   function saveSettings(){
-    var saveBtn = $("set-save");
-    if(saveBtn){saveBtn.textContent="保存中...";saveBtn.disabled=true;}
-
-    var baRows=document.querySelectorAll(".set-ba-row");
-    var balApis={};
-    var oldApis=(D&&D._balanceApis)?D._balanceApis:{};
-    for(var i=0;i<baRows.length;i++){
-      var row=baRows[i];
-      var prov=row.querySelector(".set-ba-key").textContent;
-      var urlInp=row.querySelector('input[data-field="url"]');
-      var wsInp=row.querySelector('input[data-field="workspaceId"]');
-      var ckInp=row.querySelector('input[data-field="cookie"]');
-      var enChk=row.querySelector('input[data-field="enabled"]');
-      var merged=Object.assign({},oldApis[prov]||{});
-      var has=false;
-      if(urlInp&&urlInp.value.trim()){merged.url=urlInp.value.trim();has=true;}
-      if(wsInp){merged.workspaceId=wsInp.value.trim();has=has||!!merged.workspaceId;}
-      if(ckInp){merged.cookie=ckInp.value.trim();has=has||!!merged.cookie;}
-      if(enChk){merged.enabled=enChk.checked;has=true;}
-      if(has)balApis[prov]=merged;
-    }
-    var _base = window.location.pathname.replace(/\/dashboard.*$/,"");
-    var _qs = window.location.search || "";
-
-    var p1 = trackerFetch("/balance-apis"+_qs,{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify(balApis)
-    });
-
-    var prices={};
-    var cards=document.querySelectorAll(".set-model-card");
-    for(var i=0;i<cards.length;i++){
-      var card=cards[i];
-      var key=card.dataset.key;
-      if(!key)continue;
-      var defaultPrice={};
-      var dfltSel=card.querySelector(".set-dflt-sel");
-      if(dfltSel)defaultPrice.unit=dfltSel.value;
-      var priceWraps=card.querySelectorAll(".set-slot-price");
-      if(priceWraps.length>0){
-        var inps=priceWraps[0].querySelectorAll(".set-price-inp");
-        for(var k=0;k<inps.length;k++){
-          var inp=inps[k];
-          var fld=inp.dataset.f;
-          if(fld)defaultPrice[fld]=parseFloat(inp.value)||0;
-        }
-      }
-      var slots=[];
-      var slotEls=card.querySelectorAll(".set-slot");
-      for(var j=0;j<slotEls.length;j++){
-        var se=slotEls[j];
-        // 长上下文档位（.set-tier）不是特殊时段，跳过
-        if(se.classList.contains("set-tier"))continue;
-        var from=se.querySelector('input[data-f="from"]')?.value||"09:00";
-        var to=se.querySelector('input[data-f="to"]')?.value||"18:00";
-        var unit=se.querySelector('.set-price-sel[data-f="unit"]')?.value||"token";
-        var slot={from:from,to:to,unit:unit};
-        var inps=se.querySelectorAll(".set-price-inp");
-        for(var k=0;k<inps.length;k++){
-          var inp=inps[k];
-          var fld=inp.dataset.f;
-          if(fld)slot[fld]=parseFloat(inp.value)||0;
-        }
-        slots.push(slot);
-      }
-      // 长上下文档位（官方分档价）
-      var tiers=[];
-      var tierEls=card.querySelectorAll(".set-tier");
-      for(var ti=0;ti<tierEls.length;ti++){
-        var te=tierEls[ti];
-        var maxC=parseInt(te.querySelector('input[data-f="maxContext"]')?.value,10)||0;
-        if(!maxC)continue;
-        var tprice={unit:"token"};
-        var tinps=te.querySelectorAll(".set-price-inp");
-        for(var tk=0;tk<tinps.length;tk++){
-          var tfd=tinps[tk].dataset.f;
-          if(tfd)tprice[tfd]=parseFloat(tinps[tk].value)||0;
-        }
-        tiers.push({maxContext:maxC,price:tprice});
-      }
-      var entry={currency:'USD', defaultPrice:defaultPrice};
-      if(slots.length)entry.slots=slots;
-      if(tiers.length)entry.contextTiers=tiers;
-      // 保留每月额度（设置面板只读展示，保存时不丢失）
-      var oldPt=(D&&D._priceTable)||{};
-      if(oldPt[key]&&oldPt[key].monthlyAllowance)entry.monthlyAllowance=oldPt[key].monthlyAllowance;
-      prices[key]=entry;
-    }
-
-    var p2 = trackerFetch("/price-table"+_qs,{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify(prices)
-    });
-
-    Promise.all([p1, p2]).then(function(){
-      if(saveBtn){saveBtn.textContent="保存成功";saveBtn.disabled=false;}
-      refresh();
-      setTimeout(closeSet, 1500);
-    }).catch(function(e){
-      console.error("[token-tracker] 保存失败:", e);
-      if(saveBtn){saveBtn.textContent="保存失败";saveBtn.disabled=false;}
-      setTimeout(function(){if(saveBtn)saveBtn.textContent="保存";}, 2000);
-    });
+  function saveSettings(){
+    closeSet();
   }
-  // 暴露函数到全局，并改用事件委托确保稳定
-  window.__tokenTrackerOpenSet = openSet;
-  window.__tokenTrackerCloseSet = closeSet;
-  window.__tokenTrackerSaveSettings = saveSettings;
-})();
+  if(btn)btn.onclick=openSet;
+  if(close)close.onclick=closeSet;
+  if(shade)shade.onclick=closeSet;
+  if(save)save.onclick=saveSettings;
 
-  // 用事件委托：监听整个 document 的点击，匹配目标 ID
-  document.addEventListener("click", function(e){
-    var t = e.target.closest("#st-btn, #set-close, #set-save, #set-shade, #set-ak-btn, #th-btn, #cur-btn");
-    if(t){
-      if(t.id==="st-btn"){ window.__tokenTrackerOpenSet && window.__tokenTrackerOpenSet(); }
-      else if(t.id==="cur-btn"){ toggleCur(); }
-      else if(t.id==="th-btn"){ toggleTheme(); }
-      else if(t.id==="set-close" || t.id==="set-shade"){ window.__tokenTrackerCloseSet && window.__tokenTrackerCloseSet(); }
-      else if(t.id==="set-save"){ window.__tokenTrackerSaveSettings && window.__tokenTrackerSaveSettings(); }
-      else if(t.id==="set-ak-btn"){
-        var inp=$("set-ak");if(!inp||!inp.value.trim())return;
-        var mk=inp.value.trim();
-        var pricesEl=$("set-prices");
-        if(!pricesEl)return;
-        if(pricesEl.querySelector('.set-model-card[data-key="'+escHTML(mk)+'"]')){inp.value="";return;}
-        var ekey=escHTML(mk);var curSym='$';
-        var curTag2='美元计费';
-        var html='<div class="set-model-card" data-key="'+ekey+'"><div class="set-model-hdr"><span>'+ekey+'</span><span class="set-cur-tag">'+curTag2+'</span><button class="set-model-del" data-key="'+ekey+'">✕</button></div><div class="set-dflt-label">通用价格（非特殊时段）</div><div class="set-slot-price"><select class="set-dflt-sel" data-key="'+ekey+'" data-f="unit"><option value="token" selected>按Token</option><option value="per_call">按次</option><option value="per_char">按字符</option></select><input class="set-price-inp" data-key="'+ekey+'" data-f="inputPerM" type="number" step="0.01" min="0" value="0" placeholder="'+curSym+'/M·输入"><input class="set-price-inp" data-key="'+ekey+'" data-f="inputCachePerM" type="number" step="0.01" min="0" value="0" placeholder="'+curSym+'/M·缓存"><input class="set-price-inp" data-key="'+ekey+'" data-f="outputPerM" type="number" step="0.01" min="0" value="0" placeholder="'+curSym+'/M·输出"><input class="set-price-inp" data-key="'+ekey+'" data-f="cacheWritePerM" type="number" step="0.01" min="0" value="0" placeholder="'+curSym+'/M·缓存写"></div><button class="set-slot-add" data-key="'+ekey+'">+ 添加特殊时间段</button><button class="set-slot-add set-tier-add" data-key="'+ekey+'">+ 添加长上下文档位</button></div>';
-        pricesEl.insertAdjacentHTML("beforeend",html);
-        inp.value="";
-      }
-      return;
-    }
+  document.addEventListener("click",function(e){
     var topt=e.target.closest(".set-theme-opt");
     if(topt){
       setThemeMode(topt.dataset.v || "auto");
       syncHanaTheme();
       if(D)render();
-      return;
-    }
-    var md=e.target.closest(".set-model-del");
-    if(md){
-      var card=md.closest(".set-model-card");
-      if(card)card.remove();
-      return;
-    }
-    var sa=e.target.closest(".set-slot-add");
-    if(sa){
-      // 长上下文档位添加
-      if(sa.classList.contains("set-tier-add")){
-        try{
-          var card2=sa.closest(".set-model-card");
-          if(!card2)return;
-          var mk2=card2.dataset.key;
-          if(!mk2)return;
-          var ekey2=escHTML(mk2);var curSym2='$';
-          var html2='<div class="set-slot set-tier"><div class="set-slot-time"><span class="set-ti-sep">输入 &gt;</span><input class="set-ti set-ti-max" data-key="'+ekey2+'" data-f="maxContext" type="number" step="1000" min="0" value="0" placeholder="阈值"><span class="set-ti-sep">tokens</span><button class="set-slot-del" data-key="'+ekey2+'">✕</button></div><div class="set-slot-price"><input class="set-price-inp" data-key="'+ekey2+'" data-f="inputPerM" type="number" step="0.01" min="0" value="0" placeholder="'+curSym2+'/M·输入"><input class="set-price-inp" data-key="'+ekey2+'" data-f="inputCachePerM" type="number" step="0.01" min="0" value="0" placeholder="'+curSym2+'/M·缓存"><input class="set-price-inp" data-key="'+ekey2+'" data-f="outputPerM" type="number" step="0.01" min="0" value="0" placeholder="'+curSym2+'/M·输出"><input class="set-price-inp" data-key="'+ekey2+'" data-f="cacheWritePerM" type="number" step="0.01" min="0" value="0" placeholder="'+curSym2+'/M·缓存写"></div></div>';
-          sa.insertAdjacentHTML("beforebegin",html2);
-        }catch(e){console.error("[tt] add-tier error:",e);}
-        return;
-      }
-      try{
-        var card=sa.closest(".set-model-card");
-        if(!card){console.error("[tt] add-slot: no card");return;}
-        var mk=card.dataset.key;
-        if(!mk){console.error("[tt] add-slot: no key");return;}
-        var slots=card.querySelectorAll(".set-slot");
-        var si=slots.length;
-        var ekey=escHTML(mk);
-        var html='<div class="set-slot"><div class="set-slot-time"><input class="set-ti" data-key="'+ekey+'" data-si="'+si+'" data-f="from" value="00:00" placeholder="起始"><span class="set-ti-sep">至</span><input class="set-ti" data-key="'+ekey+'" data-si="'+si+'" data-f="to" value="24:00" placeholder="结束"><button class="set-slot-del" data-key="'+ekey+'" data-si="'+si+'">✕</button></div><div class="set-slot-price"><select class="set-price-sel" data-key="'+ekey+'" data-si="'+si+'" data-f="unit"><option value="token" selected>按Token</option><option value="per_call">按次</option><option value="per_char">按字符</option></select><input class="set-price-inp" data-key="'+ekey+'" data-si="'+si+'" data-f="inputPerM" type="number" step="0.01" min="0" value="0" placeholder="$/M·输入"><input class="set-price-inp" data-key="'+ekey+'" data-si="'+si+'" data-f="inputCachePerM" type="number" step="0.01" min="0" value="0" placeholder="$/M·缓存"><input class="set-price-inp" data-key="'+ekey+'" data-si="'+si+'" data-f="outputPerM" type="number" step="0.01" min="0" value="0" placeholder="$/M·输出"><input class="set-price-inp" data-key="'+ekey+'" data-si="'+si+'" data-f="cacheWritePerM" type="number" step="0.01" min="0" value="0" placeholder="$/M·缓存写"></div></div>';
-        sa.insertAdjacentHTML("beforebegin",html);
-      }catch(e){console.error("[tt] add-slot error:",e);}
-      return;
-    }
-    var sd=e.target.closest(".set-slot-del");
-    if(sd){
-      var slot=sd.closest(".set-slot");
-      if(slot)slot.remove();
-      return;
-    }
-    var tb=e.target.closest(".set-ti-btn");
-    if(tb){
-      var inp=tb.parentElement.querySelector('input[data-f="'+tb.dataset.f+'"]');
-      if(inp){
-        var parts=inp.value.split(":").map(Number);
-        if(parts.length===2&&!isNaN(parts[0])&&!isNaN(parts[1])){
-          var total=parts[0]*60+parts[1]+parseInt(tb.dataset.d);
-          if(total<0)total=0;
-          if(total>=1440)total=1430;
-          var hh=String(Math.floor(total/60)).padStart(2,"0");
-          var mm=String(Math.floor(total%60/30)*30).padStart(2,"0");
-          inp.value=hh+":"+mm;
-        }
-      }
-      return;
     }
   });
+})();
 document.querySelectorAll(".fb").forEach(b => {
   b.onclick = function() { R = this.dataset.r; document.querySelectorAll(".fb").forEach(x => x.classList.toggle("act", x.dataset.r === R)); _selAgent=""; _selModel=""; _selProvider=""; syncDateInputs(); load(); };
 });
@@ -1417,11 +1036,6 @@ document.querySelectorAll(".fb").forEach(b => {
       _selProvider=id;
       _selModel="";
       load();return;
-    }
-    if(name==="sb-picker"){
-      _selBalance=id;
-      renderBalance();
-      return;
     }
     _selAgent=name==="sa"?id:_selAgent;
     _selModel=name==="sm"?id:_selModel;
