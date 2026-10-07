@@ -8,6 +8,8 @@ import {
 } from "./modules/theme.js";
 import { initDatePicker } from "./modules/date-picker.js";
 import { initSettingsDialog } from "./modules/settings-dialog.js";
+import { renderHeadlineCards } from "./modules/headline-cards.js";
+import { initFilterDropdowns } from "./modules/filter-dropdown.js";
 
 (function(){
 "use strict";
@@ -304,49 +306,12 @@ function render() {
     if(_fxRate&&_fxRate>0)fxEl.textContent="1 USD = "+_fxRate.toFixed(4)+" CNY";
     else fxEl.textContent="";
   }
-  $("cards").innerHTML =
-    '<div class="cd cd-total"><div class="cl">总消耗</div><div class="cv">'+fmt(D.summary.totalTokens)+'</div></div>'+
-    '<div class="cd cd-chat"><div class="cl">聊天</div><div class="cv">'+fmt(D.summary.totalDesktop)+'</div></div>'+
-    '<div class="cd cd-channel"><div class="cl">频道</div><div class="cv">'+fmt(D.summary.totalChannel)+'</div></div>'+
-    '<div class="cd cd-output"><div class="cl">输出</div><div class="cv">'+fmt(D.summary.totalOutput)+'</div></div>'+
-    '<div class="cd cd-input"><div class="cl">输入(未命中)</div><div class="cv">'+fmt(D.summary.totalInput)+'</div></div>'+
-    '<div class="cd cd-cache"><div class="cl">输入(命中)</div><div class="cv">'+fmt(D.summary.totalCacheRead)+'</div></div>'+
-    '<div class="cd cd-hitrate"><div class="cl">缓存命中率</div><div class="cv">'+(D.summary.cacheHitRate||0)+'%</div></div>';
-
-  (function(){
-    var cEl=$("cards");if(!cEl)return;
-    var items=cEl.children;
-    for(var i=0;i<items.length;i++){
-      var el=items[i];
-      el.style.animation="tt-fade-up .45s "+(0.05+i*0.05)+"s ease-out backwards";
-      el.addEventListener("animationend",function(ev){ev.currentTarget.style.animation="";},{once:true});
-    }
-  })();
-
+  renderHeadlineCards($("cards"), D.summary, fmt);
   renderMediaSection();
   renderTrend();
   renderModel();
   renderAgent();
-  renderBalance();
   renderSubscriptionQuotas();
-}
-
-function renderModelCosts(){
-  var costs=D._modelCosts||[];
-  var hasCost=false;
-  for(var i=0;i<costs.length;i++){if(costs[i].cost>0){hasCost=true;break;}}
-  if(!hasCost)return;
-  var el=$("model-costs");if(!el)return;
-  var h='<div class="mc-grid">';
-  for(var i=0;i<costs.length;i++){
-    var c=costs[i];
-    if(c.cost<=0)continue;
-    var label=c.provider?c.provider+"/"+c.model:c.model;
-    h+='<div class="mc-row"><span class="mc-label">'+escHTML(label)+'</span><span class="mc-val">$'+c.cost.toFixed(2)+'</span></div>';
-  }
-  h+='</div>';
-  el.innerHTML=h;
-  el.style.display="";
 }
 
 
@@ -392,104 +357,6 @@ function renderMediaSection(){
   }
   h+='</div>';
   el.innerHTML=h;
-}
-
-function renderFloatingCards(){
-  var costs=D._modelCosts||[];
-  var balances=D._balances||[];
-  var provConfig=D._providerConfig||[];
-  var mgData=D.mediaGen||[];
-  var mgMap={};
-  for(var i=0;i<mgData.length;i++){mgMap[mgData[i].provider+"/"+mgData[i].model]=mgData[i];}
-  if(!costs.length&&!balances.length&&!mgData.length)return'';
-  var balMap={};
-  for(var i=0;i<balances.length;i++)balMap[balances[i].provider]=balances[i];
-  var h='<div class="float-cards">';
-  for(var i=0;i<provConfig.length;i++){
-    var prov=provConfig[i];
-    var bal=balMap[prov.id];
-    // 只有真有余额数据（money/quota）才算有内容；none/no-key/error 都视为无余额
-    var hasBal=bal && (bal.type==='money' || bal.type==='quota');
-    var hasContent=hasBal;
-    for(var j=0;j<prov.models.length;j++){for(var k=0;k<costs.length;k++){if(costs[k].model===prov.models[j]&&costs[k].cost>0){hasContent=true;break;}}}
-    if(!hasContent)continue;
-    h+='<div class="fc-prov"><div class="fc-prov-title">'+escHTML(prov.id)+'</div>';
-    if(bal&&bal.type==='money'){
-      var bc=bal.total>50?'var(--color-green)':(bal.total>20?'var(--color-orange)':'var(--color-red)');
-      h+='<div class="fc-section">';
-      h+='<div class="fc-row fc-balance"><span class="fc-label">可用余额</span><span class="fc-val" style="color:'+bc+'">'+bal.display+'</span></div>';
-      if(bal.details&&bal.details.length>1){
-        for(var d=0;d<bal.details.length;d++){
-          var det=bal.details[d];
-          h+='<div class="fc-row fc-detail"><span class="fc-label">'+escHTML(det.label)+'</span><span class="fc-val">$'+det.amount.toFixed(2)+'</span></div>';
-        }
-      }
-      h+='</div>';
-    }else if(bal&&bal.type==='quota'){
-      var bc2=bal.remain>50?'var(--color-green)':(bal.remain>20?'var(--color-orange)':'var(--color-red)');
-      h+='<div class="fc-section">';
-      h+='<div class="fc-row fc-balance"><span class="fc-label">剩余配额</span><span class="fc-val" style="color:'+bc2+'">'+bal.display+'</span></div>';
-      h+='<div class="fc-bar"><div class="fc-bar-used" style="width:'+bal.used+'%"></div><div class="fc-bar-remain" style="width:'+bal.remain+'%"></div></div>';
-      h+='</div>';
-    }
-    var provCost=0;
-    var hasCostRow=false;
-    for(var j=0;j<prov.models.length;j++){
-      var mk=prov.models[j];
-      var cost=0,tokens=0,unit="token";
-      for(var k=0;k<costs.length;k++){if(costs[k].model===mk){cost=costs[k].cost;unit=costs[k].unit||"token";break;}}
-      for(var k=0;k<(D.models||[]).length;k++){if(D.models[k].id===mk){tokens=D.models[k].totalTokens||0;break;}}
-      var isQuota=bal&&bal.type==='quota';
-      if(isQuota){
-        if(tokens<=0)continue;
-        if(!hasCostRow){h+='<div class="fc-section"><div class="fc-section-title">消费</div>';hasCostRow=true;}
-        h+='<div class="fc-row"><span class="fc-label">'+escHTML(mk)+'</span><span class="fc-val fc-tokens">'+fmt(tokens)+' tok</span></div>';
-      }else if(unit==='per_call'){
-        var mgEntry=mgMap[prov.id+"/"+mk];
-        var calls=mgEntry?mgEntry.callCount:0;
-        var succ=mgEntry?mgEntry.successCount:0;
-        if(calls<=0&&cost<=0)continue;
-        if(!hasCostRow){h+='<div class="fc-section"><div class="fc-section-title">消费</div>';hasCostRow=true;}
-        provCost+=cost;
-        h+='<div class="fc-row"><span class="fc-label">'+escHTML(mk)+'</span><span class="fc-val fc-cost">$'+cost.toFixed(2)+' <small style="opacity:.5">'+calls+'次'+(succ>0&&succ!==calls?' 成功'+succ:'')+'</small></span></div>';
-      }else if(unit==='per_char'){
-        if(cost<=0)continue;
-        if(!hasCostRow){h+='<div class="fc-section"><div class="fc-section-title">消费</div>';hasCostRow=true;}
-        provCost+=cost;
-        h+='<div class="fc-row"><span class="fc-label">'+escHTML(mk)+'</span><span class="fc-val fc-cost">$'+cost.toFixed(2)+' <small style="opacity:.5">按字符</small></span></div>';
-      }else{
-        if(cost<=0)continue;
-        if(!hasCostRow){h+='<div class="fc-section"><div class="fc-section-title">消费</div>';hasCostRow=true;}
-        provCost+=cost;
-        h+='<div class="fc-row"><span class="fc-label">'+escHTML(mk)+'</span><span class="fc-val fc-cost">$'+cost.toFixed(2)+'</span></div>';
-      }
-    }
-    if(hasCostRow){
-      if(provCost>0){
-        h+='<div class="fc-row fc-subtotal"><span class="fc-label">总消费</span><span class="fc-val fc-cost">$'+provCost.toFixed(2)+'</span></div>';
-      }
-      h+='</div>';
-    }
-    h+='</div>';
-  }
-  var provSeen2={};
-  for(var i=0;i<provConfig.length;i++)provSeen2[provConfig[i].id]=true;
-  for(var i=0;i<mgData.length;i++){
-    var mg2=mgData[i];
-    if(provSeen2[mg2.provider])continue;
-    provSeen2[mg2.provider]=true;
-    var mgCost=mg2.cost||0;
-    if(mg2.callCount<=0&&mgCost<=0)continue;
-    h+='<div class="fc-prov"><div class="fc-prov-title">'+escHTML(mg2.provider)+'</div>';
-    h+='<div class="fc-row"><span class="fc-label">'+escHTML(mg2.model)+'</span><span class="fc-val fc-cost">'+(mgCost>0?'$'+mgCost.toFixed(2)+' ':'')+'<small style="opacity:.5">'+(mg2.kind==='video'?'VIDEO':'IMAGE')+' '+mg2.callCount+'次'+(mg2.successCount>0&&mg2.successCount!==mg2.callCount?' 成功'+mg2.successCount:'')+'</small></span></div>';
-    h+='</div>';
-  }
-  var total=D.summary&&D.summary.estimatedCost>0?D.summary.estimatedCost:0;
-  if(total>0){
-    h+='<div class="fc-prov fc-total"><span class="fc-label">合计消费</span><span class="fc-val fc-cost">$'+total.toFixed(2)+'</span></div>';
-  }
-  h+='</div>';
-  return h;
 }
 
 var _trendMode = "scene";
@@ -685,9 +552,6 @@ function renderAgent() {
     $("ac").parentElement.querySelector(".ct").textContent="Agent 消耗对比";
     ac = new Chart($("ac"),{type:"bar",data:{labels:ags.map(function(a){var n=(D.agentNames||{})[a.id]||a.id;if(a.deleted)n+='（历史 Agent）';return n}),datasets:[{label:"消耗",data:ags.map(function(a){return a.totalTokens}),backgroundColor:cc.agent.slice(0,ags.length),borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,color:cc.text,indexAxis:"y",scales:{x:{grid:{color:cc.grid},ticks:{callback:function(v){return fmtAxis(v)},font:{size:12}}},y:{grid:{display:false},ticks:{font:{size:12}}}},plugins:{legend:{display:false}}}});
   }
-}
-
-function renderBalance(){
 }
 
 function fmtReset(sec){
@@ -913,38 +777,29 @@ document.querySelectorAll(".fb").forEach(b => {
   b.onclick = function() { R = this.dataset.r; document.querySelectorAll(".fb").forEach(x => x.classList.toggle("act", x.dataset.r === R)); _selAgent=""; _selModel=""; _selProvider=""; syncDateInputs(); load(); };
 });
 
-(function(){
-  function sel(n,id,name){
-    if(name==="stype"){
-      _selType=id;
-      var tx=$("stype")?.querySelector(".cs-txt");
-      if(tx){if(id==="")tx.textContent="类型";else tx.textContent=id==="desktop"?"聊天":"频道";}
-      load();return;
+initFilterDropdowns({
+  onSelect: function(item) {
+    if (item.name === "stype") {
+      _selType = item.value;
+      var tx = $("stype")?.querySelector(".cs-txt");
+      if (tx) {
+        if (item.value === "") tx.textContent = "类型";
+        else tx.textContent = item.value === "desktop" ? "聊天" : "频道";
+      }
+      load();
+      return;
     }
-    if(name==="sp"){
-      _selProvider=id;
-      _selModel="";
-      load();return;
+    if (item.name === "sp") {
+      _selProvider = item.value;
+      _selModel = "";
+      load();
+      return;
     }
-    _selAgent=name==="sa"?id:_selAgent;
-    _selModel=name==="sm"?id:_selModel;
+    _selAgent = item.name === "sa" ? item.value : _selAgent;
+    _selModel = item.name === "sm" ? item.value : _selModel;
     load();
   }
-  document.addEventListener("click",function(e){
-    var cs=e.target.closest(".cs");
-    document.querySelectorAll(".cs.open").forEach(function(c){if(c!==cs)c.classList.remove("open")});
-    if(!cs)return;
-    e.stopPropagation();
-    cs.classList.toggle("open");
-    var opt=e.target.closest(".cs-opt");
-    if(opt){
-      cs.classList.remove("open");
-      var v=opt.dataset.v||"",t=opt.textContent;
-      cs.querySelector(".cs-txt").textContent=t;
-      sel(t,v,cs.id);
-    }
-  });
-})();
+});
 
 initDatePicker({
   fromInputId: "df",
