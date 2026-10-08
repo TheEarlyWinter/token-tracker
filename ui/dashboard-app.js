@@ -143,9 +143,14 @@ function updateFilterOpts() {
     } else tp.textContent="供应商";
   }
   tm.textContent=_selModel?modelLabel(_selModel):"模型";
-  if(_allAgents) {
+  var agentList = (D && Array.isArray(D.agentOptions)) ? D.agentOptions : (_allAgents || []);
+  if(agentList.length) {
     var h='<div class="cs-opt'+(_selAgent===""?" sel":"")+'" data-v="">全部 Agent</div>';
-    _allAgents.forEach(function(a){var n=(D.agentNames||{})[a.id]||a.id;if(a.deleted)n+='（历史 Agent）';h+='<div class="cs-opt'+(_selAgent===a.id?" sel":"")+'" data-v="'+a.id+'">'+n+'</div>'});
+    agentList.forEach(function(a){
+      var n=(D && D.agentNames && D.agentNames[a.id]) || a.name || a.id;
+      if(a.deleted) n+='（历史 Agent）';
+      h+='<div class="cs-opt'+(_selAgent===a.id?" sel":"")+'" data-v="'+escHTML(a.id)+'">'+escHTML(n)+'</div>';
+    });
     la.innerHTML=h;
   }
   if(sp&&lp&&D){
@@ -224,7 +229,14 @@ function load(refreshFirst) {
     if(sequence !== _loadSequence || _closed) return;
     if(d._status) _status=d._status;
     if(!r.ok || d.error) throw Error("数据暂不可用");
-    if(!_allAgents||!D){_allAgents=d.agents.slice();_allModels=d.models.slice();}
+    if (Array.isArray(d.agentOptions)) {
+      _allAgents = d.agentOptions.slice();
+    } else if (!_allAgents || !D) {
+      _allAgents = (d.agents || []).slice();
+    }
+    if (!_allModels || !D) {
+      _allModels = (d.models || []).slice();
+    }
     _allProviders=(d.providerOptions||d.providers||[]).slice();
     D = d; _viewError=false; _fxRate = d._fxRate > 0 ? d._fxRate : null;
     if (el) el.style.display = "none";
