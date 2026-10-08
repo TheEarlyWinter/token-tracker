@@ -153,12 +153,40 @@ export function createTurnsInspector({
         exportBtn.textContent = "正在导出…";
         const res = await fetchFn("/turns/csv?" + params.toString());
         if (!res.ok) throw new Error("HTTP " + res.status);
-        const blob = await res.blob();
+        const text = await res.text();
+        const dateStr = new Date().toISOString().slice(0, 10);
+        const filename = `token-turns-${dateStr}.csv`;
+
+        // 1. 优先使用宿主官方文件保存桥接（完美支持 Electron/宿主沙箱弹窗另存为）
+        if (window.hana?.resources?.saveFile) {
+          try {
+            const bytes = new TextEncoder().encode(text);
+            let bin = "";
+            for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+            const b64 = btoa(bin);
+            const saveRes = await window.hana.resources.saveFile({
+              suggestedName: filename,
+              mimeType: "text/csv;charset=utf-8",
+              contentBase64: b64,
+            });
+            if (saveRes?.kind === "saved") {
+              exportBtn.textContent = "已保存！";
+              setTimeout(() => { exportBtn.textContent = "导出 CSV"; }, 2000);
+              return;
+            } else if (saveRes?.kind === "canceled") {
+              return;
+            }
+          } catch (e) {
+            console.warn("[turns-inspector] hana saveFile error, trying blob fallback:", e);
+          }
+        }
+
+        // 2. Web 浏览器原生 Blob 下载
+        const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        const dateStr = new Date().toISOString().slice(0, 10);
-        a.download = `token-turns-${dateStr}.csv`;
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -169,7 +197,9 @@ export function createTurnsInspector({
         window.open((base ? base + "/turns/csv?" : "./turns/csv?") + params.toString(), "_blank");
       } finally {
         exportBtn.disabled = false;
-        exportBtn.textContent = "导出 CSV";
+        if (exportBtn.textContent === "正在导出…") {
+          exportBtn.textContent = "导出 CSV";
+        }
       }
     };
 
