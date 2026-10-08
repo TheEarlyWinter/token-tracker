@@ -80,13 +80,15 @@
 <body data-surface="function-panel">
   <div class="fp-container">
     <div class="fp-header">
-      <span class="fp-title">Token 用量</span>
-      <span class="fp-badge">v6.5.9</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="fp-title">Token 用量</span>
+        <span class="fp-badge">v6.5.10</span>
+      </div>
+      <button id="fp-refresh" class="fp-refresh-btn" type="button" title="刷新额度">刷新</button>
     </div>
     <div class="fp-section" id="fp-codex-section">
       <div class="fp-section-title">
         <span>Codex 额度</span>
-        <button id="fp-refresh" class="fp-refresh-btn" type="button" title="刷新额度">刷新</button>
       </div>
       <div id="codex-card-slot">
         <div class="sb-codex-card sb-codex-dim">
@@ -99,6 +101,11 @@
         <span>DeepSeek 余额</span>
       </div>
       <div id="deepseek-card-slot"></div>
+    </div>
+    <div id="fp-empty-notice" style="display:none">
+      <div class="sb-codex-card sb-codex-dim">
+        <div class="sb-codex-quiet">已在设置中关闭功能面板卡片</div>
+      </div>
     </div>
   </div>
   <script type="module" src="./function-panel.js"></script>

@@ -25,6 +25,10 @@ test("settings-store normalizeSettings handles defaults, clamping, and types", (
   assert.equal(normalizeSettings({ highUsageThreshold: 50000 }).highUsageThreshold, 50000);
   assert.equal(normalizeSettings({ highUsageThreshold: 0 }).highUsageThreshold, 0);
   assert.equal(normalizeSettings({ highUsageThreshold: -1 }).highUsageThreshold, 30000);
+
+  assert.equal(normalizeSettings({ showCodexQuota: false }).showCodexQuota, false);
+  assert.equal(normalizeSettings({ showDeepseekBalance: false }).showDeepseekBalance, false);
+  assert.equal(normalizeSettings({ showCodexQuota: true }).showCodexQuota, true);
 });
 
 test("settings-store loadSettings and saveSettings perform atomic storage with legacy fallback", async () => {
@@ -174,6 +178,8 @@ test("ui initSettingsDialog loads and saves settings via fetchFn", async () => {
   makeEl("set-save");
   makeEl("set-scan-interval");
   makeEl("set-high-usage");
+  makeEl("set-show-codex");
+  makeEl("set-show-deepseek");
   makeEl("set-msg");
 
   const originalDoc = globalThis.document;
@@ -211,11 +217,15 @@ test("ui initSettingsDialog loads and saves settings via fetchFn", async () => {
     // 修改输入并保存
     elements["set-scan-interval"].value = "75";
     elements["set-high-usage"].value = "40000";
+    elements["set-show-codex"].checked = false;
+    elements["set-show-deepseek"].checked = true;
     await dialog.saveSettings();
 
     assert.deepEqual(postedBody, {
       scanInterval: 75,
       highUsageThreshold: 40000,
+      showCodexQuota: false,
+      showDeepseekBalance: true,
     });
     assert.match(elements["set-msg"].textContent, /已保存/);
   } finally {

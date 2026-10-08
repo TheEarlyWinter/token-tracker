@@ -10,9 +10,11 @@ export function initSettingsDialog({ onThemeChange, fetchFn } = {}) {
   const save = document.getElementById("set-save");
   const scanInput = document.getElementById("set-scan-interval");
   const highInput = document.getElementById("set-high-usage");
+  const codexToggle = document.getElementById("set-show-codex");
+  const dsToggle = document.getElementById("set-show-deepseek");
   const msgEl = document.getElementById("set-msg");
 
-  let currentSettings = { scanInterval: 60, highUsageThreshold: 30000 };
+  let currentSettings = { scanInterval: 60, highUsageThreshold: 30000, showCodexQuota: true, showDeepseekBalance: true };
   let inFlightPromise = null;
 
   function loadSettingsData() {
@@ -27,6 +29,8 @@ export function initSettingsDialog({ onThemeChange, fetchFn } = {}) {
             currentSettings = data;
             if (scanInput) scanInput.value = String(data.scanInterval);
             if (highInput) highInput.value = String(data.highUsageThreshold ?? 30000);
+            if (codexToggle) codexToggle.checked = data.showCodexQuota !== false;
+            if (dsToggle) dsToggle.checked = data.showDeepseekBalance !== false;
           }
         }
       } catch {
@@ -66,6 +70,8 @@ export function initSettingsDialog({ onThemeChange, fetchFn } = {}) {
   async function saveSettings() {
     const scanVal = parseInt(scanInput?.value, 10);
     const highVal = parseInt(highInput?.value, 10);
+    const showCodexQuota = codexToggle ? Boolean(codexToggle.checked) : true;
+    const showDeepseekBalance = dsToggle ? Boolean(dsToggle.checked) : true;
 
     if (isNaN(scanVal) || scanVal < 5) {
       showMsg("扫描间隔必须为 ≥ 5 的整数秒", true);
@@ -86,13 +92,20 @@ export function initSettingsDialog({ onThemeChange, fetchFn } = {}) {
           body: JSON.stringify({
             scanInterval: scanVal,
             highUsageThreshold: highVal,
+            showCodexQuota,
+            showDeepseekBalance,
           }),
         });
         const result = await res.json();
         if (!res.ok || result.error) {
           throw new Error(result.error || "保存失败");
         }
-        currentSettings = result.settings || { scanInterval: scanVal, highUsageThreshold: highVal };
+        currentSettings = result.settings || {
+          scanInterval: scanVal,
+          highUsageThreshold: highVal,
+          showCodexQuota,
+          showDeepseekBalance,
+        };
         showMsg("设置已保存并生效");
         setTimeout(closeSet, 800);
       } catch (err) {
