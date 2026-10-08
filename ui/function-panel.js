@@ -118,6 +118,32 @@ export async function initFunctionPanel() {
     refreshBtn.addEventListener("click", () => loadAndRender(true));
   }
 
+  // 跨上下文监听设置即时保存通知，立即重新渲染，无需用户手动点击刷新
+  try {
+    const bc = new BroadcastChannel("token-tracker-channel");
+    bc.onmessage = (event) => {
+      if (event.data?.type === "tt-settings-updated") {
+        loadAndRender(false);
+      }
+    };
+  } catch {}
+
+  try {
+    window.addEventListener("storage", (e) => {
+      if (e.key === "tt-settings-tick") {
+        loadAndRender(false);
+      }
+    });
+  } catch {}
+
+  try {
+    window.addEventListener("message", (e) => {
+      if (e.data?.type === "tt-settings-updated") {
+        loadAndRender(false);
+      }
+    });
+  } catch {}
+
   await loadAndRender(false);
 }
 

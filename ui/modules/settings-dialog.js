@@ -2,7 +2,7 @@
 
 import { getThemeMode, setThemeMode, syncHanaTheme, syncThemeUI } from "./theme.js";
 
-export function initSettingsDialog({ onThemeChange, fetchFn } = {}) {
+export function initSettingsDialog({ onThemeChange, onSettingsSaved, fetchFn } = {}) {
   const btn = document.getElementById("st-btn");
   const panel = document.getElementById("set-panel");
   const shade = document.getElementById("set-shade");
@@ -107,6 +107,28 @@ export function initSettingsDialog({ onThemeChange, fetchFn } = {}) {
           showDeepseekBalance,
         };
         showMsg("设置已保存并生效");
+
+        // 广播跨上下文即时通知，驱动左侧功能面板等视图无需手动刷新即可即刻重绘
+        try {
+          const bc = new BroadcastChannel("token-tracker-channel");
+          bc.postMessage({ type: "tt-settings-updated", settings: currentSettings });
+          bc.close();
+        } catch {}
+        try {
+          if (typeof localStorage !== "undefined") {
+            localStorage.setItem("tt-settings-tick", Date.now().toString());
+          }
+        } catch {}
+        try {
+          if (typeof window !== "undefined" && window.parent) {
+            window.parent.postMessage({ type: "tt-settings-updated", settings: currentSettings }, "*");
+          }
+        } catch {}
+
+        if (typeof onSettingsSaved === "function") {
+          onSettingsSaved(currentSettings);
+        }
+
         setTimeout(closeSet, 800);
       } catch (err) {
         showMsg(err.message, true);
