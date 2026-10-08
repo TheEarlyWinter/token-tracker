@@ -2,6 +2,20 @@
 
 import { getThemeMode, setThemeMode, syncHanaTheme, syncThemeUI } from "./theme.js";
 
+let settingsBc = null;
+function getSettingsBroadcastChannel() {
+  if (typeof BroadcastChannel === "undefined") return null;
+  if (!settingsBc) {
+    try {
+      settingsBc = new BroadcastChannel("token-tracker-channel");
+      if (typeof settingsBc.unref === "function") {
+        settingsBc.unref();
+      }
+    } catch {}
+  }
+  return settingsBc;
+}
+
 export function initSettingsDialog({ onThemeChange, onSettingsSaved, fetchFn } = {}) {
   const btn = document.getElementById("st-btn");
   const panel = document.getElementById("set-panel");
@@ -121,13 +135,17 @@ export function initSettingsDialog({ onThemeChange, onSettingsSaved, fetchFn } =
 
         // 广播跨上下文即时通知，驱动左侧功能面板等视图无需手动刷新即可即刻重绘
         try {
-          const bc = new BroadcastChannel("token-tracker-channel");
-          bc.postMessage({ type: "tt-settings-updated", settings: currentSettings });
-          bc.close();
+          const bc = getSettingsBroadcastChannel();
+          if (bc) {
+            bc.postMessage({ type: "tt-settings-updated", settings: currentSettings });
+            // 注意：绝不能立刻 bc.close()，在 Chromium / Electron 内核中会导致尚未派发的广播被强行终止
+          }
         } catch {}
         try {
           if (typeof localStorage !== "undefined") {
-            localStorage.setItem("tt-settings-tick", Date.now().toString());
+            // 双重保障触发：随机数+时间戳确保 storage 事件必触发，并存入最新配置数据供极速提取
+            localStorage.setItem("tt-settings-tick", Date.now() + "_" + Math.random());
+            localStorage.setItem("tt-settings-data", JSON.stringify(currentSettings));
           }
         } catch {}
         try {

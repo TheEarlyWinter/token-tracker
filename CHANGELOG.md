@@ -1,3 +1,16 @@
+## 6.7.0
+
+- 修复看板日期选择器弹出失效与单日小时级趋势联动：
+  - 在 `ui/base.css` 中补齐 `.cal.on` 展示规则与 `tt-fade-up` 平滑过渡动画，采用 `position: fixed` 进行视口绝对对齐，彻底修复因缺少 `.on` 样式导致日历始终处于 `display: none` 无法弹出的问题。
+  - 增强 `ui/modules/date-picker.js` 交互与可靠性：输入框渲染后即时绑定事件并支持 `focus` 触发；支持当前选中日高亮（`.sel`）；支持 `Escape` 键快捷关闭；加入视口越界反向弹出保护。
+  - 完善单日范围（如 5 号到 5 号）小时级趋势（24 小时 hourly breakdown）自动聚合联动与单测覆盖。
+  - 新增独立单测套件 `test/date-picker.test.js`。
+- 设置保存跨上下文即时联动加固：
+  - 移除 BroadcastChannel 的立即 `close()`，采用模块级单例常驻并适配 `unref()`，彻底解决通道过早关闭导致的广播丢弃与垃圾回收失效。
+  - `fetchSettings` 请求追加防穿透时间戳 `?_t=${Date.now()}`，杜绝浏览器 HTTP 缓存。
+  - `loadAndRender` 支持直接接收 `directSettings` 负载，实现毫秒级 UI 显隐切换。
+  - `localStorage` 追加随机数 tick 与数据冗余存储。
+
 ## 6.6.1
 
 - 功能面板自动化自刷新：

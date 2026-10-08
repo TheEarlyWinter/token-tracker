@@ -254,3 +254,72 @@ test("hardening: function-panel shows empty notice when Codex is disabled and De
     globalThis.window = originalWindow;
   }
 });
+
+test("hardening: function-panel immediate UI update via directSettings and cache-busting", async () => {
+  const originalDoc = globalThis.document;
+  const originalFetch = globalThis.fetch;
+  const originalWindow = globalThis.window;
+
+  try {
+    const elements = {};
+    function makeEl(id) {
+      const el = {
+        id,
+        style: {},
+        innerHTML: "",
+        textContent: "",
+        querySelector: () => ({ textContent: "" }),
+        closest: () => el,
+        parentElement: null,
+      };
+      elements[id] = el;
+      return el;
+    }
+
+    const codexSec = makeEl("fp-codex-section");
+    const dsSec = makeEl("fp-deepseek-section");
+    const emptyNotice = makeEl("fp-empty-notice");
+    makeEl("codex-card-slot");
+    makeEl("deepseek-card-slot");
+    makeEl("fp-refresh");
+
+    globalThis.document = {
+      getElementById: (id) => elements[id] || null,
+    };
+    globalThis.window = {
+      location: { pathname: "/test" },
+      hana: null,
+    };
+
+    let fetchUrls = [];
+    globalThis.fetch = async (url) => {
+      fetchUrls.push(url);
+      if (url.includes("/settings")) {
+        return {
+          ok: true,
+          json: async () => ({ showCodexQuota: true, showDeepseekBalance: true }),
+        };
+      }
+      return { ok: true, json: async () => ({ connected: false }) };
+    };
+
+    // 1. 直接传入 directSettings：无需请求 /settings 即可完成毫秒级显隐切换
+    await loadAndRender(false, { showCodexQuota: false, showDeepseekBalance: false });
+    assert.equal(codexSec.style.display, "none");
+    assert.equal(dsSec.style.display, "none");
+    assert.equal(emptyNotice.style.display, "");
+    assert.ok(!fetchUrls.some(u => u.includes("/settings")), "传入 directSettings 时不应再发 /settings 请求");
+
+    // 2. 正常拉取：请求 /settings 必须携带 ?_t= 缓存穿透参数
+    fetchUrls = [];
+    await loadAndRender(false);
+    const settingsReq = fetchUrls.find(u => u.includes("/settings"));
+    assert.ok(settingsReq, "必须请求 /settings 接口");
+    assert.match(settingsReq, /\/settings\?_t=\d+/, "请求必须追加 _t 时间戳防缓存穿透");
+  } finally {
+    globalThis.document = originalDoc;
+    globalThis.fetch = originalFetch;
+    globalThis.window = originalWindow;
+  }
+});
+

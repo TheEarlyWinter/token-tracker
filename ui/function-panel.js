@@ -3,6 +3,21 @@ import { renderCodexQuotaCard } from "./modules/codex-card.js";
 import { renderDeepSeekCard } from "./modules/deepseek-card.js";
 import { hana } from "./assets/sdk.js";
 
+// 常驻顶层 BroadcastChannel 引用，防止局部变量被垃圾回收 (GC) 导致监听器失效
+let panelBc = null;
+function getPanelBroadcastChannel() {
+  if (typeof BroadcastChannel === "undefined") return null;
+  if (!panelBc) {
+    try {
+      panelBc = new BroadcastChannel("token-tracker-channel");
+      if (typeof panelBc.unref === "function") {
+        panelBc.unref();
+      }
+    } catch {}
+  }
+  return panelBc;
+}
+
 function getAppApiBase() {
   const p = window.location.pathname || "";
   if (p.indexOf("/api/apps/token-tracker/routes") >= 0) {
@@ -12,14 +27,15 @@ function getAppApiBase() {
 }
 
 async function fetchSettings() {
+  const query = `?_t=${Date.now()}`;
   if (window.hana?.api?.fetch) {
     try {
-      const res = await window.hana.api.fetch(`/settings`);
+      const res = await window.hana.api.fetch(`/settings${query}`);
       return await res.json();
     } catch {}
   }
   try {
-    const res = await fetch(`${getAppApiBase()}/settings`);
+    const res = await fetch(`${getAppApiBase()}/settings${query}`);
     return await res.json();
   } catch {}
   return { showCodexQuota: true, showDeepseekBalance: true };
@@ -49,7 +65,7 @@ async function fetchDeepSeekBalance(force = false) {
   return await res.json();
 }
 
-export async function loadAndRender(force = false) {
+export async function loadAndRender(force = false, directSettings = null) {
   const codexSection = document.getElementById("fp-codex-section");
   const dsSection = document.getElementById("fp-deepseek-section");
   const emptyNotice = document.getElementById("fp-empty-notice");
@@ -59,7 +75,8 @@ export async function loadAndRender(force = false) {
   if (refreshBtn) refreshBtn.disabled = true;
 
   try {
-    const settings = await fetchSettings();
+    // 若外部传入了即时设置对象（如广播通知或本地存储缓存），优先直接使用，不等网络回包即完成毫秒级 UI 切换
+    const settings = directSettings || await fetchSettings();
     const showCodex = settings?.showCodexQuota !== false;
     const showDeepseek = settings?.showDeepseekBalance !== false;
 
@@ -135,17 +152,28 @@ export async function initFunctionPanel() {
 
   // 跨上下文监听设置即时保存与额度更新通知，立即重新渲染，无需用户手动点击刷新
   try {
-    const bc = new BroadcastChannel("token-tracker-channel");
-    bc.onmessage = (event) => {
-      if (event.data?.type === "tt-settings-updated" || event.data?.type === "tt-quota-updated") {
-        loadAndRender(false);
-      }
-    };
+    const bc = getPanelBroadcastChannel();
+    if (bc) {
+      bc.onmessage = (event) => {
+        if (event.data?.type === "tt-settings-updated") {
+          loadAndRender(false, event.data?.settings || null);
+        } else if (event.data?.type === "tt-quota-updated") {
+          loadAndRender(false);
+        }
+      };
+    }
   } catch {}
 
   try {
     window.addEventListener("storage", (e) => {
-      if (e.key === "tt-settings-tick" || e.key === "tt-quota-tick") {
+      if (e.key === "tt-settings-tick") {
+        let cachedSettings = null;
+        try {
+          const raw = localStorage.getItem("tt-settings-data");
+          if (raw) cachedSettings = JSON.parse(raw);
+        } catch {}
+        loadAndRender(false, cachedSettings);
+      } else if (e.key === "tt-quota-tick") {
         loadAndRender(false);
       }
     });
@@ -153,7 +181,9 @@ export async function initFunctionPanel() {
 
   try {
     window.addEventListener("message", (e) => {
-      if (e.data?.type === "tt-settings-updated" || e.data?.type === "tt-quota-updated") {
+      if (e.data?.type === "tt-settings-updated") {
+        loadAndRender(false, e.data?.settings || null);
+      } else if (e.data?.type === "tt-quota-updated") {
         loadAndRender(false);
       }
     });

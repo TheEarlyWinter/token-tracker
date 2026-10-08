@@ -701,6 +701,20 @@ window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",func
   if(ht==="inherit"||ht==="system"){syncHanaTheme();if(D)render();}
 });
 // ── 订阅余量自动刷新：轻量拉取，只更新余量仪表，不重建图表（后端 5 分钟缓存天然节流） ──
+var quotaBc = null;
+function getQuotaBroadcastChannel() {
+  if (typeof BroadcastChannel === "undefined") return null;
+  if (!quotaBc) {
+    try {
+      quotaBc = new BroadcastChannel("token-tracker-channel");
+      if (typeof quotaBc.unref === "function") {
+        quotaBc.unref();
+      }
+    } catch (e) {}
+  }
+  return quotaBc;
+}
+
 function refreshQuota() {
   if (!D) return;
   const qs = window.location.search;
@@ -717,9 +731,15 @@ function refreshQuota() {
       renderHdrQuota();
       renderSubscriptionQuotas();
       try {
-        var bc = new BroadcastChannel("token-tracker-channel");
-        bc.postMessage({ type: "tt-quota-updated" });
-        bc.close();
+        var bc = getQuotaBroadcastChannel();
+        if (bc) {
+          bc.postMessage({ type: "tt-quota-updated" });
+        }
+      } catch (err) {}
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem("tt-quota-tick", Date.now() + "_" + Math.random());
+        }
       } catch (err) {}
     })
     .catch(function(){});

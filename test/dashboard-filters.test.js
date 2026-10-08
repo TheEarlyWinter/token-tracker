@@ -55,7 +55,36 @@ test('hourly trend, daily trend, model detail and overview use the same filter i
   const historical=build(snapshot,'all',{from:'2020-01-02',to:'2020-01-02',model:'shared'});
   assert.equal(historical.hourly.reduce((s,h)=>s+h.totalTokens,0),110);
   assert.equal(historical.hourly.find(h=>h.hour==='12').totalTokens,110);
+  const yesterdayRes=build(snapshot,'yesterday');
+  assert.ok(Array.isArray(yesterdayRes.hourly));
+  assert.equal(yesterdayRes.hourly.length, 24);
   const excluded=build(snapshot,'today',{to:'2020-01-02'});
   assert.equal(excluded.summary.totalTokens,0);
   assert.equal(excluded.hourly.reduce((s,h)=>s+h.totalTokens,0),0);
+});
+
+test('single-day hourly breakdown populates tokens, cacheRead and handles custom single date', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tracker-singleday-'));
+  const engine = createLedgerEngine({ dataDir:dir, log:{info(){},warn(){},error(){}} });
+  t.after(()=>{engine.close();fs.rmSync(dir,{recursive:true,force:true});});
+  await engine.scan([
+    {
+      requestId: 'sd-1',
+      startedAt: '2026-10-05T14:00:00+08:00',
+      status: 'ok',
+      source: { subsystem: 'session' },
+      attribution: { agentId: 'a', sessionId: 'sess-sd-1', kind: 'session', conversationType: 'desktop' },
+      model: { provider: 'p1', modelId: 'm1' },
+      usage: { input: { totalTokens: 50, uncachedTokens: 40 }, output: { totalTokens: 25 }, cache: { readTokens: 10, writeTokens: 0 }, totalTokens: 75 },
+    }
+  ], {});
+  const snapshot = engine.getData();
+  const d = build(snapshot, '', { from: '2026-10-05', to: '2026-10-05' });
+  assert.equal(d.summary.totalTokens, 75);
+  assert.equal(d.summary.totalInput, 50);
+  assert.equal(d.summary.totalOutput, 25);
+  assert.equal(d.hourly.length, 24);
+  const h14 = d.hourly.find(h => h.hour === '14');
+  assert.equal(h14.totalTokens, 75);
+  assert.equal(h14.cacheRead, 10);
 });
