@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>功能面板 · Token 用量</title>
+  <link rel="stylesheet" href="./base.css">
+  <link rel="stylesheet" href="./theme.css">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--bg-card, #ffffff);
+      color: var(--text-primary, #18181b);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      overflow-x: hidden;
+      overflow-y: auto;
+      box-sizing: border-box;
+    }
+    .fp-container {
+      padding: 14px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-sizing: border-box;
+      max-width: 100%;
+    }
+    .fp-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--divider, #f4f4f5);
+    }
+    .fp-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary, #18181b);
+      letter-spacing: -0.01em;
+    }
+    .fp-badge {
+      font-size: 10px;
+      font-family: var(--font-mono, monospace);
+      color: var(--text-muted, #71717a);
+      background: var(--bg-badge, #f4f4f5);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .fp-section-title {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-muted, #71717a);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .fp-refresh-btn {
+      background: none;
+      border: 1px solid var(--card-border, #e4e4e7);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 10px;
+      color: var(--text-muted, #71717a);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .fp-refresh-btn:hover {
+      color: var(--text-primary, #18181b);
+      border-color: #a1a1aa;
+    }
+    .fp-refresh-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .fp-footer-hint {
+      font-size: 10px;
+      color: var(--text-muted, #a1a1aa);
+      text-align: center;
+      margin-top: 6px;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body data-surface="function-panel">
+  <div class="fp-container">
+    <div class="fp-header">
+      <span class="fp-title">Token 用量</span>
+      <span class="fp-badge">v6.5.8</span>
+    </div>
+    <div>
+      <div class="fp-section-title">
+        <span>Codex 额度</span>
+        <button id="fp-refresh" class="fp-refresh-btn" type="button" title="刷新额度">刷新</button>
+      </div>
+      <div id="codex-card-slot">
+        <div class="sb-codex-card sb-codex-dim">
+          <div class="sb-codex-quiet">正在加载 Codex 额度…</div>
+        </div>
+      </div>
+    </div>
+    <div class="fp-footer-hint">
+      宿主整页功能面板 · 60秒防刷同步
+    </div>
+  </div>
+  <script type="module" src="./function-panel.js"></script>
+</body>
+</html>

@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "token-tracker",
   "name": "Token 用量",
-  "version": "6.5.7",
+  "version": "6.5.8",
   "minAppVersion": "0.1050.9",
   "description": "展示所有 Agent 的 Token 消耗统计，支持按时间、Agent、模型筛选和下钻。",
   "entry": "index.js",
@@ -47,12 +47,18 @@
         "id": "token-tracker-dashboard",
         "title": "Token 用量",
         "description": "Agent Token 消耗统计仪表盘",
-        "route": "/dashboard-v6.5.7.html",
+        "route": "/dashboard-v6.5.8.html",
         "realization": "page",
         "siteNavEntry": true,
+        "fpFullPanel": true,
         "closable": false,
         "face": {
           "image": "assets/face.png"
+        },
+        "functionPanel": {
+          "id": "token-tracker-sidepanel",
+          "label": "Codex 额度",
+          "route": "/function-panel.html"
         }
       }
     ]

@@ -60,7 +60,14 @@ test("Manifest V2 合规性与权限最小化校验", () => {
   assert.ok(cardHtml.includes(`data-ui-version="${manifest.version}"`));
   assert.equal(card.realization, "page", "realization 必须为 page");
   assert.equal(card.siteNavEntry, true, "siteNavEntry 必须为 true");
+  assert.equal(card.fpFullPanel, true, "fpFullPanel 必须为 true");
   assert.equal(card.closable, false, "closable 必须为 false");
+
+  // 功能面板 functionPanel 校验
+  assert.ok(card.functionPanel, "主卡必须声明专属 functionPanel 替换默认空状态");
+  assert.equal(card.functionPanel.id, "token-tracker-sidepanel", "functionPanel.id 匹配契约");
+  assert.equal(card.functionPanel.route, "/function-panel.html", "functionPanel.route 必须为 /function-panel.html");
+  assert.ok(fs.existsSync(path.join(rootDir, "ui", card.functionPanel.route)), "functionPanel.route 页面必须存在");
 
   // 真实图片文件存在性
   assert.ok(fs.existsSync(path.join(rootDir, manifest.icon)), "顶层 icon 文件必须存在");

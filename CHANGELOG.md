@@ -1,3 +1,7 @@
+## 6.5.8
+
+- 宿主功能面板（Function Panel）适配与 Codex 额度挂载：在 `manifest.json` 主整页卡声明 `functionPanel`（`/function-panel.html`）与 `fpFullPanel: true`，彻底替换宿主侧边面板的默认空状态“此页尚无清单”，实现 Codex 额度（5小时、本周、重置卡）在 Hana 宿主侧边功能面板上的原生常驻呈现与 60s 防刷同步。
+
 ## 6.5.7
 
 - 侧边栏集成 Codex 额度与重置时间微卡：纯只读展示 5 小时窗口额度、每周额度、重置倒计时与重置卡余量；采用纯白极简规范（3px 极细进度条、Mono 灰黑微排版、无彩色 Emoji）；后端复用宿主 Codex OAuth/Bearer 凭据，内置 60 秒内存防刷缓存与优雅静默降级。
