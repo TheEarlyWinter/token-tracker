@@ -37,8 +37,8 @@ const DELETE_SESSION_SQL = "DELETE FROM turns WHERE session_key = ?";
 const SORT_EXPR = {
   time: "at",
   tokens: "total",
-  uncached: "MAX(COALESCE(input, 0) - COALESCE(cache_read, 0), 0)",
-  hit: "CASE WHEN input IS NOT NULL AND input > 0 THEN CAST(cache_read AS REAL) / input ELSE NULL END",
+  uncached: "COALESCE(input, 0)",
+  hit: "CASE WHEN (COALESCE(input, 0) + COALESCE(cache_read, 0)) > 0 THEN CAST(COALESCE(cache_read, 0) AS REAL) / (COALESCE(input, 0) + COALESCE(cache_read, 0)) ELSE NULL END",
 };
 
 const DEFAULT_LIMIT = 50;

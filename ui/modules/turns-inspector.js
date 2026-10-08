@@ -132,7 +132,7 @@ export function createTurnsInspector({
     };
 
     const exportBtn = header.querySelector(".turns-export-btn");
-    exportBtn.onclick = () => {
+    exportBtn.onclick = async () => {
       const filters = getFilters();
       const params = new URLSearchParams({
         sortKey: state.sortKey,
@@ -147,8 +147,30 @@ export function createTurnsInspector({
         ...(filters.provider ? { provider: filters.provider } : {}),
         ...(filters.type ? { type: filters.type } : {}),
       });
-      const base = getApiBase() || "";
-      window.open((base ? base + "/turns/csv?" : "./turns/csv?") + params.toString(), "_blank");
+
+      try {
+        exportBtn.disabled = true;
+        exportBtn.textContent = "正在导出…";
+        const res = await fetchFn("/turns/csv?" + params.toString());
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        const dateStr = new Date().toISOString().slice(0, 10);
+        a.download = `token-turns-${dateStr}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (err) {
+        console.warn("[turns-inspector] CSV blob export error, falling back:", err);
+        const base = getApiBase() || "";
+        window.open((base ? base + "/turns/csv?" : "./turns/csv?") + params.toString(), "_blank");
+      } finally {
+        exportBtn.disabled = false;
+        exportBtn.textContent = "导出 CSV";
+      }
     };
 
     card.appendChild(header);

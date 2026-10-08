@@ -606,7 +606,14 @@ export default function (app, ctx) {
         const total = rows.length;
         const sumTokens = rows.reduce((acc, r) => acc + r.total, 0);
         if (sortKey === "tokens") rows.sort((a, b) => b.total - a.total);
-        else if (sortKey === "uncached") rows.sort((a, b) => Math.max(0, b.input - b.cacheRead) - Math.max(0, a.input - a.cacheRead));
+        else if (sortKey === "uncached") rows.sort((a, b) => (b.input || 0) - (a.input || 0));
+        else if (sortKey === "hit") {
+          const hit = (r) => {
+            const tot = (r.input || 0) + (r.cacheRead || 0);
+            return tot > 0 ? (r.cacheRead || 0) / tot : -1;
+          };
+          rows.sort((a, b) => hit(b) - hit(a));
+        }
         else rows.sort((a, b) => b.at.localeCompare(a.at));
         const paged = rows.slice((page - 1) * pageSize, page * pageSize);
         res = { rows: paged, total, sumTokens };
@@ -677,7 +684,14 @@ export default function (app, ctx) {
           }
         }
         if (sortKey === "tokens") rows.sort((a, b) => b.total - a.total);
-        else if (sortKey === "uncached") rows.sort((a, b) => Math.max(0, b.input - b.cacheRead) - Math.max(0, a.input - a.cacheRead));
+        else if (sortKey === "uncached") rows.sort((a, b) => (b.input || 0) - (a.input || 0));
+        else if (sortKey === "hit") {
+          const hit = (r) => {
+            const tot = (r.input || 0) + (r.cacheRead || 0);
+            return tot > 0 ? (r.cacheRead || 0) / tot : -1;
+          };
+          rows.sort((a, b) => hit(b) - hit(a));
+        }
         else rows.sort((a, b) => b.at.localeCompare(a.at));
       }
       const csv = buildDetailsCSV(rows);

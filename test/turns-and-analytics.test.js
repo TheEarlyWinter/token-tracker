@@ -38,27 +38,27 @@ test("turns-store creates SQLite schema, indexes records, and supports uncached/
           provider: "gemini",
           model: "gemini-3.8-flash-high",
           totalTokens: 1000,
-          inTokens: 800,
+          inTokens: 200,
           outTokens: 200,
-          cacheRead: 600, // uncached = 200
+          cacheRead: 600,
         },
         {
           time: "2026-10-07T11:00:00Z",
           provider: "gemini",
           model: "gemini-3.8-flash-high",
           totalTokens: 5000,
-          inTokens: 4500,
+          inTokens: 4000,
           outTokens: 500,
-          cacheRead: 500, // uncached = 4000
+          cacheRead: 500,
         },
         {
           time: "2026-10-07T12:00:00Z",
           provider: "deepseek",
           model: "deepseek-chat",
           totalTokens: 20000,
-          inTokens: 18000,
+          inTokens: 1000,
           outTokens: 2000,
-          cacheRead: 17000, // uncached = 1000
+          cacheRead: 17000,
         },
       ],
     };
@@ -71,12 +71,17 @@ test("turns-store creates SQLite schema, indexes records, and supports uncached/
     assert.equal(resTime.total, 3);
     assert.equal(resTime.rows[0].total, 20000);
 
-    // 2. 按未命中输入倒序：中间轮次 uncached = 4000 最大，排第一
+    // 2. 按未命中输入倒序：中间轮次 inTokens = 4000 最大，排第一
     const resUncached = queryTurns(store, { sortKey: "uncached", order: "desc" });
     assert.equal(resUncached.rows[0].total, 5000);
-    assert.equal(resUncached.rows[0].input - resUncached.rows[0].cacheRead, 4000);
+    assert.equal(resUncached.rows[0].input, 4000);
 
-    // 3. 门槛筛选：minTokens >= 10000
+    // 3. 按命中率倒序：第三轮 cacheRead / (input + cacheRead) = 17000 / 18000 = 94.4% 最高，排第一
+    const resHit = queryTurns(store, { sortKey: "hit", order: "desc" });
+    assert.equal(resHit.rows[0].model, "deepseek-chat");
+    assert.equal(resHit.rows[0].cacheRead, 17000);
+
+    // 4. 门槛筛选：minTokens >= 10000
     const resFilter = queryTurns(store, { minTokens: 10000 });
     assert.equal(resFilter.total, 1);
     assert.equal(resFilter.rows[0].model, "deepseek-chat");
