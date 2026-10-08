@@ -133,11 +133,11 @@ export async function initFunctionPanel() {
     refreshBtn.addEventListener("click", () => loadAndRender(true));
   }
 
-  // 跨上下文监听设置即时保存通知，立即重新渲染，无需用户手动点击刷新
+  // 跨上下文监听设置即时保存与额度更新通知，立即重新渲染，无需用户手动点击刷新
   try {
     const bc = new BroadcastChannel("token-tracker-channel");
     bc.onmessage = (event) => {
-      if (event.data?.type === "tt-settings-updated") {
+      if (event.data?.type === "tt-settings-updated" || event.data?.type === "tt-quota-updated") {
         loadAndRender(false);
       }
     };
@@ -145,7 +145,7 @@ export async function initFunctionPanel() {
 
   try {
     window.addEventListener("storage", (e) => {
-      if (e.key === "tt-settings-tick") {
+      if (e.key === "tt-settings-tick" || e.key === "tt-quota-tick") {
         loadAndRender(false);
       }
     });
@@ -153,11 +153,34 @@ export async function initFunctionPanel() {
 
   try {
     window.addEventListener("message", (e) => {
-      if (e.data?.type === "tt-settings-updated") {
+      if (e.data?.type === "tt-settings-updated" || e.data?.type === "tt-quota-updated") {
         loadAndRender(false);
       }
     });
   } catch {}
+
+  // 自动化刷新机制：
+  // 1. 每 60 秒定时自动静默拉取（与服务端 60s 内存防刷缓存对齐）
+  setInterval(() => {
+    if (typeof document !== "undefined" && document.hidden) return;
+    loadAndRender(false);
+  }, 60_000);
+
+  // 2. 页面可见性恢复（从后台切回前台）自动静默刷新
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) {
+        loadAndRender(false);
+      }
+    });
+  }
+
+  // 3. 窗口重新获得焦点时自动静默刷新
+  if (typeof window !== "undefined") {
+    window.addEventListener("focus", () => {
+      loadAndRender(false);
+    });
+  }
 
   await loadAndRender(false);
 }

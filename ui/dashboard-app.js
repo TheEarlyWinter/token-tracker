@@ -716,6 +716,11 @@ function refreshQuota() {
       D._subscriptionQuotas = nq;
       renderHdrQuota();
       renderSubscriptionQuotas();
+      try {
+        var bc = new BroadcastChannel("token-tracker-channel");
+        bc.postMessage({ type: "tt-quota-updated" });
+        bc.close();
+      } catch (err) {}
     })
     .catch(function(){});
 }
