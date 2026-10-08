@@ -142,6 +142,14 @@ export function createAgentAnalytics({ container, getData = () => null }) {
   }
 
   function renderStream(panel, analytics, rootData) {
+    // 同步控制按钮的激活高亮状态
+    panel.querySelectorAll("[data-dim]").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.dim === flowDim);
+    });
+    panel.querySelectorAll("[data-scale]").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.scale === flowScale);
+    });
+
     const box = panel.querySelector(".stream-chart-container");
     const legend = panel.querySelector(".stream-legend");
     box.innerHTML = "";
