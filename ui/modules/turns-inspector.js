@@ -12,6 +12,9 @@ export function createTurnsInspector({
 }) {
   if (!container) return;
 
+  let exportResult = null;
+  let exporting = false;
+
   let state = {
     sortKey: "time",
     order: "desc",
@@ -139,7 +142,7 @@ export function createTurnsInspector({
             <option value="10000000" ${state.minTokens === 10000000 ? "selected" : ""}>≥1000万</option>
           </select>
         </div>
-        <button type="button" class="btn btn-outline turns-export-btn" title="导出当前筛选条件下的全部轮次到文件">
+        <button type="button" class="btn btn-outline turns-export-btn" title="将当前筛选条件下的全部轮次保存到插件导出目录">
           导出 CSV
         </button>
         <button type="button" class="btn btn-outline turns-copy-btn" title="一键复制全部 CSV 文本，可直接粘贴到 Excel">
@@ -180,44 +183,25 @@ export function createTurnsInspector({
         ...(filters.type ? { type: filters.type } : {}),
       });
 
+      if (exporting) return;
+      exporting = true;
+      exportResult = { message: "正在保存 CSV…" };
+      render();
       try {
-        exportBtn.disabled = true;
-        exportBtn.textContent = "正在处理…";
-        const res = await fetchFn("/turns/csv?" + params.toString());
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        const text = await res.text();
-        const dateStr = new Date().toISOString().slice(0, 10);
-        const filename = `token-turns-${dateStr}.csv`;
-
-        // 1. 标准 Blob 下载（外部独立浏览器访问时可直接落盘）
-        try {
-          const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = filename;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          setTimeout(() => URL.revokeObjectURL(url), 1000);
-        } catch {}
-
-        // 2. 同时拷贝到剪贴板（卡片槽内宿主拦截原生下载时的双保险）
-        const copied = await copyTextToClipboard(text);
-        if (copied) {
-          exportBtn.textContent = "已复制到剪贴板！(桌面已有离线文件)";
-          setTimeout(() => { exportBtn.textContent = "导出 CSV"; }, 3000);
-        } else {
-          exportBtn.textContent = "文件已存在于电脑桌面！";
-          setTimeout(() => { exportBtn.textContent = "导出 CSV"; }, 3000);
-        }
+        const res = await fetchFn("/turns/export?" + params.toString(), { method: "POST" });
+        const receipt = await res.json();
+        if (!res.ok) throw new Error(receipt.error || "HTTP " + res.status);
+        if (receipt.saved !== true || !receipt.path) throw new Error("后台未确认文件保存成功");
+        exportResult = { receipt, message: `已保存 ${fmtNum(receipt.rowCount)} 轮 CSV` };
       } catch (err) {
-        exportBtn.textContent = "导出失败: " + err.message;
-        setTimeout(() => { exportBtn.textContent = "导出 CSV"; }, 3000);
+        exportResult = { message: "导出失败: " + err.message };
       } finally {
-        exportBtn.disabled = false;
+        exporting = false;
+        render();
       }
     };
+    exportBtn.disabled = exporting;
+    exportBtn.textContent = exporting ? "正在保存…" : "导出 CSV";
 
     const copyBtn = header.querySelector(".turns-copy-btn");
     if (copyBtn) {
@@ -260,6 +244,29 @@ export function createTurnsInspector({
     }
 
     card.appendChild(header);
+    if (exportResult) {
+      const result = document.createElement("div");
+      result.className = "turns-export-result";
+      result.setAttribute("role", "status");
+      const message = document.createElement("div");
+      message.textContent = exportResult.message;
+      result.appendChild(message);
+      if (exportResult.receipt) {
+        const location = document.createElement("input");
+        location.type = "text";
+        location.readOnly = true;
+        location.value = exportResult.receipt.path;
+        location.setAttribute("aria-label", "CSV 保存位置");
+        location.style.width = "100%";
+        location.onclick = () => location.select();
+        result.appendChild(location);
+        const hint = document.createElement("div");
+        hint.textContent = "文件已保存在插件导出目录，可按上方路径打开。";
+        result.appendChild(hint);
+      }
+      card.appendChild(result);
+    }
+
 
     // Table 区域
     const tableWrap = document.createElement("div");

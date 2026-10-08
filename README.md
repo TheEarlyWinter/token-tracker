@@ -132,3 +132,7 @@ npm test
 GitHub Release 及工作流成功状态须实际核对；推送 Tag 不代表构建已经成功。
 
 MIT License，见 [LICENSE](LICENSE)。
+
+### v6.5.2：卡片 CSV 导出修复
+
+单轮明细的“导出 CSV”由插件后台生成文件，保存在插件数据目录的 `exports/` 子目录（本机为 `~/.hanako/app-data/token-tracker/exports/`）。卡片显示实际保存路径及轮数；失败时显示原因。每次导出使用独立文件名，保留 UTF-8 BOM 和当前筛选条件下的全部轮次，不受当前分页限制。此操作无需卡片保存弹窗、浏览器下载或剪贴板授权，不增加清单权限。“复制 CSV”仍是单独按钮。
