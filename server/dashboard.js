@@ -12,6 +12,7 @@ import { loadSettings, saveSettings } from "../lib/settings-store.mjs";
 import { buildDetailsCSV } from "../runtime/engine/services/details-csv.js";
 import { buildVisualAnalytics } from "../runtime/engine/services/visual-analytics.js";
 import { CodexQuotaService } from "../lib/codex-quota.mjs";
+import { DeepSeekBalanceService } from "../lib/deepseek-balance.mjs";
 const UI_VERSION = JSON.parse(fs.readFileSync(new URL('../manifest.json', import.meta.url), 'utf8')).version;
 
 // OpenCode Go 官方定价表（opencode.ai/docs/go 校验）
@@ -183,6 +184,14 @@ export default function (app, ctx) {
     network: ctx.network,
     fetchFn: globalThis.fetch,
     ttlMs: 60_000,
+  });
+
+  const deepseekBalanceService = new DeepSeekBalanceService({
+    bus: ctx.bus,
+    network: ctx.network,
+    fetchFn: globalThis.fetch,
+    ttlMs: 60_000,
+    dataDir: ctx.dataDir,
   });
 
   // 数据接口处理器
@@ -428,11 +437,22 @@ export default function (app, ctx) {
   // Codex 额度查询处理器（独立轻量接口）
   const handleCodexQuota = async (c) => {
     try {
-      const force = c.req.query("force") === "1";
+      const force = c.req.query("force") === "1" || c.req.query("refresh") === "1";
       const quota = await codexQuotaService.getQuota({ force });
       return c.json(quota);
     } catch (e) {
       return c.json({ connected: false, reason: "error", message: e.message || "Codex 额度查询失败" }, 200);
+    }
+  };
+
+  // DeepSeek 余额查询处理器（独立轻量接口）
+  const handleDeepseekBalance = async (c) => {
+    try {
+      const force = c.req.query("force") === "1" || c.req.query("refresh") === "1";
+      const balance = await deepseekBalanceService.getBalance({ force });
+      return c.json(balance);
+    } catch (e) {
+      return c.json({ connected: false, reason: "error", message: e.message || "DeepSeek 余额查询失败" }, 200);
     }
   };
 
@@ -821,6 +841,9 @@ export default function (app, ctx) {
 
   app.get("/dashboard/codex-quota", handleCodexQuota);
   app.get("/codex-quota", handleCodexQuota);
+
+  app.get("/dashboard/deepseek-balance", handleDeepseekBalance);
+  app.get("/deepseek-balance", handleDeepseekBalance);
 
   app.get("/widget/stream", handleWidgetStream);
   app.get("/widget/data", handleWidgetData);

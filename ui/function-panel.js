@@ -1,5 +1,6 @@
-// ui/function-panel.js — 宿主功能面板 (Function Panel) Codex 额度与状态挂载模块
+// ui/function-panel.js — 宿主功能面板 (Function Panel) Codex 额度与 DeepSeek 余额挂载模块
 import { renderCodexQuotaCard } from "./modules/codex-card.js";
+import { renderDeepSeekCard } from "./modules/deepseek-card.js";
 import { hana } from "./assets/sdk.js";
 
 function getAppApiBase() {
@@ -22,19 +23,47 @@ async function fetchCodexQuota(force = false) {
   return await res.json();
 }
 
+async function fetchDeepSeekBalance(force = false) {
+  const query = force ? "?refresh=1" : "";
+  if (window.hana?.api?.fetch) {
+    try {
+      const res = await window.hana.api.fetch(`/deepseek-balance${query}`);
+      return await res.json();
+    } catch {}
+  }
+  const res = await fetch(`${getAppApiBase()}/deepseek-balance${query}`);
+  return await res.json();
+}
+
 async function loadAndRender(force = false) {
-  const slot = document.getElementById("codex-card-slot");
+  const codexSlot = document.getElementById("codex-card-slot");
+  const dsSlot = document.getElementById("deepseek-card-slot");
   const refreshBtn = document.getElementById("fp-refresh");
   if (refreshBtn) refreshBtn.disabled = true;
 
   try {
-    const data = await fetchCodexQuota(force);
-    renderCodexQuotaCard(slot, data);
-  } catch (err) {
-    renderCodexQuotaCard(slot, {
-      connected: false,
-      message: "额度加载失败，请重试",
-    });
+    const [codexRes, dsRes] = await Promise.allSettled([
+      fetchCodexQuota(force),
+      fetchDeepSeekBalance(force),
+    ]);
+
+    if (codexRes.status === "fulfilled" && codexRes.value) {
+      renderCodexQuotaCard(codexSlot, codexRes.value);
+    } else {
+      renderCodexQuotaCard(codexSlot, {
+        connected: false,
+        message: "额度加载失败，请重试",
+      });
+    }
+
+    if (dsRes.status === "fulfilled" && dsRes.value) {
+      renderDeepSeekCard(dsSlot, dsRes.value);
+    } else {
+      renderDeepSeekCard(dsSlot, {
+        connected: false,
+        message: "余额加载失败",
+      });
+    }
   } finally {
     if (refreshBtn) refreshBtn.disabled = false;
   }

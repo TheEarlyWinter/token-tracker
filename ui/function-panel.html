@@ -81,9 +81,9 @@
   <div class="fp-container">
     <div class="fp-header">
       <span class="fp-title">Token 用量</span>
-      <span class="fp-badge">v6.5.8</span>
+      <span class="fp-badge">v6.5.9</span>
     </div>
-    <div>
+    <div class="fp-section" id="fp-codex-section">
       <div class="fp-section-title">
         <span>Codex 额度</span>
         <button id="fp-refresh" class="fp-refresh-btn" type="button" title="刷新额度">刷新</button>
@@ -93,6 +93,12 @@
           <div class="sb-codex-quiet">正在加载 Codex 额度…</div>
         </div>
       </div>
+    </div>
+    <div class="fp-section" id="fp-deepseek-section" style="display:none">
+      <div class="fp-section-title">
+        <span>DeepSeek 余额</span>
+      </div>
+      <div id="deepseek-card-slot"></div>
     </div>
   </div>
   <script type="module" src="./function-panel.js"></script>
