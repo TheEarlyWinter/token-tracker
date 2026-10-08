@@ -110,8 +110,11 @@ export function createTurnsInspector({
             <option value="10000000" ${state.minTokens === 10000000 ? "selected" : ""}>≥1000万</option>
           </select>
         </div>
-        <button type="button" class="btn btn-outline turns-export-btn" title="导出当前筛选条件下的全部轮次">
+        <button type="button" class="btn btn-outline turns-export-btn" title="导出当前筛选条件下的全部轮次到文件">
           导出 CSV
+        </button>
+        <button type="button" class="btn btn-outline turns-copy-btn" title="一键复制全部 CSV 文本，可直接粘贴到 Excel">
+          复制 CSV
         </button>
       </div>
     `;
@@ -202,6 +205,48 @@ export function createTurnsInspector({
         }
       }
     };
+
+    const copyBtn = header.querySelector(".turns-copy-btn");
+    if (copyBtn) {
+      copyBtn.onclick = async () => {
+        const filters = getFilters();
+        const params = new URLSearchParams({
+          sortKey: state.sortKey,
+          order: state.order,
+          minTokens: String(state.minTokens),
+          all: "true",
+          ...(filters.range ? { range: filters.range } : {}),
+          ...(filters.from ? { from: filters.from } : {}),
+          ...(filters.to ? { to: filters.to } : {}),
+          ...(filters.agent ? { agent: filters.agent } : {}),
+          ...(filters.model ? { model: filters.model } : {}),
+          ...(filters.provider ? { provider: filters.provider } : {}),
+          ...(filters.type ? { type: filters.type } : {}),
+        });
+
+        try {
+          copyBtn.disabled = true;
+          copyBtn.textContent = "正在读取…";
+          const res = await fetchFn("/turns/csv?" + params.toString());
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          const text = await res.text();
+          if (window.hana?.clipboard?.writeText) {
+            await window.hana.clipboard.writeText(text);
+          } else if (navigator?.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+          } else {
+            throw new Error("剪贴板不可用");
+          }
+          copyBtn.textContent = "已复制！可直接粘贴至 Excel";
+          setTimeout(() => { copyBtn.textContent = "复制 CSV"; }, 2500);
+        } catch (err) {
+          copyBtn.textContent = "复制失败: " + err.message;
+          setTimeout(() => { copyBtn.textContent = "复制 CSV"; }, 2500);
+        } finally {
+          copyBtn.disabled = false;
+        }
+      };
+    }
 
     card.appendChild(header);
 

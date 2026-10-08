@@ -35,6 +35,7 @@ test("Manifest V2 合规性与权限最小化校验", () => {
     "app/agents.read",
     "app/sessions.read",
     "app/media.tasks.read",
+    "app/resources.write",
   ];
   assert.deepEqual(
     [...manifest.capabilities].sort(),

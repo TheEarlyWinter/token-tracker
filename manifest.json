@@ -19,7 +19,8 @@
     "app/agents.read",
     "app/sessions.read",
     "app/media.tasks.read",
-    "app/ui.clipboard-write"
+    "app/ui.clipboard-write",
+    "app/resources.write"
   ],
   "contributes": {
     "ui": {
