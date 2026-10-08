@@ -2,11 +2,21 @@
   "manifestVersion": 2,
   "id": "token-tracker",
   "name": "Token 用量",
-  "version": "6.5.6",
+  "version": "6.5.7",
   "minAppVersion": "0.1050.9",
   "description": "展示所有 Agent 的 Token 消耗统计，支持按时间、Agent、模型筛选和下钻。",
   "entry": "index.js",
   "icon": "assets/icon.png",
+  "network": {
+    "allowedHosts": [
+      "chatgpt.com"
+    ],
+    "methods": [
+      "GET"
+    ],
+    "defaultTimeoutMs": 10000,
+    "maxResponseBytes": 1048576
+  },
   "capabilities": [
     "app/usage.read",
     "app/runtime.execute",
@@ -37,7 +47,7 @@
         "id": "token-tracker-dashboard",
         "title": "Token 用量",
         "description": "Agent Token 消耗统计仪表盘",
-        "route": "/dashboard-v6.5.6.html",
+        "route": "/dashboard-v6.5.7.html",
         "realization": "page",
         "siteNavEntry": true,
         "closable": false,

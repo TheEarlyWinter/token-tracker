@@ -66,6 +66,10 @@ test("Manifest V2 合规性与权限最小化校验", () => {
   assert.ok(fs.existsSync(path.join(rootDir, manifest.icon)), "顶层 icon 文件必须存在");
   assert.ok(fs.existsSync(path.join(rootDir, "ui", card.face.image)), "card face.image 必须存在于 ui/ 下");
 
+  // 网络声明校验
+  assert.deepEqual(manifest.network?.allowedHosts, ["chatgpt.com"], "network.allowedHosts 必须包含 chatgpt.com");
+  assert.deepEqual(manifest.network?.methods, ["GET"], "network.methods 仅需 GET");
+
   // Settings 校验（迁移至插件内部自管，不在宿主全局设置中注入）
   assert.equal(manifest.contributes.settings, undefined, "插件内部自管设置，不向宿主注入全局 settings 表单");
   assert.ok(!manifest.contributes.configuration, "禁止使用已废弃的 configuration 字段");

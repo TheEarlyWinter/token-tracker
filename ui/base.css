@@ -241,6 +241,124 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* 侧边栏 Codex 额度卡片（纯白极简规范） */
+.sb-codex-card {
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--card-border, #e4e4e7);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.sb-codex-card.sb-codex-dim {
+  padding: 8px 12px;
+  opacity: 0.75;
+}
+
+.sb-codex-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sb-codex-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary, #71717a);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.02em;
+}
+
+.sb-codex-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sb-codex-badge {
+  font-size: 10px;
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--text-secondary, #52525b);
+  background: var(--bg-hover, #f4f4f5);
+  border: 1px solid var(--card-border, #e4e4e7);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.sb-codex-credit {
+  font-size: 10px;
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--accent, #246b6e);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--card-border));
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.sb-codex-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sb-codex-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sb-codex-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.sb-codex-label {
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--text-tertiary, #71717a);
+}
+
+.sb-codex-val {
+  font-size: 13px;
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--text-primary, #18181b);
+}
+
+.sb-codex-track {
+  width: 100%;
+  height: 3px;
+  background: var(--bg-hover, #f4f4f5);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.sb-codex-bar {
+  height: 100%;
+  background: var(--text-primary, #18181b);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.sb-codex-hint {
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--text-tertiary, #71717a);
+  text-align: right;
+}
+
+.sb-codex-quiet {
+  font-size: 11px;
+  color: var(--text-tertiary, #71717a);
+  padding: 2px 0;
+}
+
 /* ── 4. 主内容视窗 ── */
 .main-area {
   flex: 1;

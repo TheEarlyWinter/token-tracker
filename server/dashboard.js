@@ -11,6 +11,7 @@ import { saveTurnsExport } from "../lib/turns-export.mjs";
 import { loadSettings, saveSettings } from "../lib/settings-store.mjs";
 import { buildDetailsCSV } from "../runtime/engine/services/details-csv.js";
 import { buildVisualAnalytics } from "../runtime/engine/services/visual-analytics.js";
+import { CodexQuotaService } from "../lib/codex-quota.mjs";
 const UI_VERSION = JSON.parse(fs.readFileSync(new URL('../manifest.json', import.meta.url), 'utf8')).version;
 
 // OpenCode Go 官方定价表（opencode.ai/docs/go 校验）
@@ -177,6 +178,13 @@ function sanitizeBalanceApisForClient(balApis) {
 }
 
 export default function (app, ctx) {
+  const codexQuotaService = new CodexQuotaService({
+    bus: ctx.bus,
+    network: ctx.network,
+    fetchFn: globalThis.fetch,
+    ttlMs: 60_000,
+  });
+
   // 数据接口处理器
   const handleData = async (c) => {
     try {
@@ -404,9 +412,27 @@ export default function (app, ctx) {
         ? "账本读取窗口达 20,000 条；历史仅包含插件已采集并归档的记录。"
         : null;
 
+      // 异步尝试获取 Codex 额度（复用 60s 内存防刷缓存，失败优雅降级）
+      try {
+        result.codexQuota = await codexQuotaService.getQuota();
+      } catch {
+        result.codexQuota = { connected: false, reason: "error", message: "Codex 额度读取异常" };
+      }
+
       return c.json(result);
     } catch (e) {
       return c.json({ error: e.message || "请求处理异常", code: "INTERNAL_ERROR" }, 500);
+    }
+  };
+
+  // Codex 额度查询处理器（独立轻量接口）
+  const handleCodexQuota = async (c) => {
+    try {
+      const force = c.req.query("force") === "1";
+      const quota = await codexQuotaService.getQuota({ force });
+      return c.json(quota);
+    } catch (e) {
+      return c.json({ connected: false, reason: "error", message: e.message || "Codex 额度查询失败" }, 200);
     }
   };
 
@@ -792,6 +818,9 @@ export default function (app, ctx) {
 
   app.get("/dashboard/session/detail", handleSessionDetail);
   app.get("/session/detail", handleSessionDetail);
+
+  app.get("/dashboard/codex-quota", handleCodexQuota);
+  app.get("/codex-quota", handleCodexQuota);
 
   app.get("/widget/stream", handleWidgetStream);
   app.get("/widget/data", handleWidgetData);

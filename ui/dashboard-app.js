@@ -17,6 +17,7 @@ import {
 import { renderMediaSection as renderMedia } from "./modules/media-section.js";
 import { createAgentAnalytics } from "./modules/agent-analytics.js";
 import { createTurnsInspector } from "./modules/turns-inspector.js";
+import { renderCodexQuotaCard } from "./modules/codex-card.js";
 
 (function(){
 "use strict";
@@ -197,6 +198,7 @@ $("app").innerHTML =
   '<span class="cs" id="sm"><span class="cs-txt">模型</span><span class="cs-arw">▾</span><div class="cs-list"></div></span>'+
   '<span class="cs" id="stype"><span class="cs-txt">类型</span><span class="cs-arw">▾</span><div class="cs-list"><div class="cs-opt sel" data-v="">全部</div><div class="cs-opt" data-v="desktop">聊天</div><div class="cs-opt" data-v="channel">频道</div></div></span>'+
   '</div>'+
+  '<div id="sb-codex" style="margin-top:2px"></div>'+
   '<div id="fx" class="fx-side" style="display:none"></div>'+
   '</div>'+
   '<div class="main-area">'+
@@ -323,8 +325,15 @@ function render() {
   renderModel();
   renderAgent();
   renderSubscriptionQuotas();
+  renderCodexCard();
   renderAgentAnalyticsSection();
   renderTurnsInspectorSection();
+}
+
+function renderCodexCard() {
+  const container = $("sb-codex");
+  if (!container || !D) return;
+  renderCodexQuotaCard(container, D.codexQuota);
 }
 
 let _agentAnalyticsInstance = null;
