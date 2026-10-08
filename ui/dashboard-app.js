@@ -210,7 +210,7 @@ $("app").innerHTML =
   '<div id="ld" class="ld">翻阅档案…</div>'+
   '</div>'+
   '</div>'+
-  '<div class="set-shade" id="set-shade" style="display:none"></div><div class="set-panel" id="set-panel" style="display:none"><div class="set-hdr"><span>设置</span><div style="display:flex;gap:8px;align-items:center"><button class="btn" id="set-save">保存</button><button class="btn" id="set-close">✕</button></div></div><div class="set-body"><div class="set-sec"><div class="set-sec-title">外观</div><div class="set-theme-row" id="set-theme"><button class="set-theme-opt" data-v="auto">跟随系统</button><button class="set-theme-opt" data-v="light">浅色</button><button class="set-theme-opt" data-v="dark">深色</button></div></div></div></div>';
+  '<div class="set-shade" id="set-shade" style="display:none"></div><div class="set-panel" id="set-panel" style="display:none"><div class="set-hdr"><span>设置</span><div style="display:flex;gap:8px;align-items:center"><button class="btn" id="set-save">保存</button><button class="btn" id="set-close">✕</button></div></div><div class="set-body"><div class="set-sec"><div class="set-sec-title">外观</div><div class="set-theme-row" id="set-theme"><button class="set-theme-opt" data-v="auto">跟随系统</button><button class="set-theme-opt" data-v="light">浅色</button><button class="set-theme-opt" data-v="dark">深色</button></div></div><div class="set-sec"><div class="set-sec-title">同步与阈值</div><div class="set-form-group"><label class="set-label" for="set-scan-interval"><span>扫描间隔（秒）</span><span class="set-hint">后台同步频率 (≥5s)</span></label><input type="number" class="set-input" id="set-scan-interval" min="5" max="3600" step="1" value="60"></div><div class="set-form-group"><label class="set-label" for="set-high-usage"><span>高消耗阈值 (Tokens)</span><span class="set-hint">单轮/会话标记阈值</span></label><input type="number" class="set-input" id="set-high-usage" min="0" step="1000" value="30000"></div><div id="set-msg" class="set-feedback" style="display:none"></div></div></div></div>';
 
 function load(refreshFirst) {
   var sequence = ++_loadSequence;
@@ -622,7 +622,7 @@ function escHTML(s){if(!s)return'';return String(s).replace(/&/g,"&amp;").replac
 $("rf").onclick = refresh;
 var thBtn = $("th-btn");
 if (thBtn) thBtn.onclick = function() { toggleTheme({ onThemeChange: function() { if (D) render(); } }); };
-initSettingsDialog({ onThemeChange: function() { if (D) render(); } });
+initSettingsDialog({ fetchFn: trackerFetch, onThemeChange: function() { if (D) render(); } });
 document.querySelectorAll(".fb").forEach(b => {
   b.onclick = function() { R = this.dataset.r; document.querySelectorAll(".fb").forEach(x => x.classList.toggle("act", x.dataset.r === R)); _selAgent=""; _selModel=""; _selProvider=""; syncDateInputs(); load(); };
 });

@@ -11,6 +11,7 @@ import {
   handleLegacyTokenUsageEvent,
 } from "./lib/realtime-stream.mjs";
 import { createSyncScheduler } from "./lib/sync-scheduler.mjs";
+import { loadSettings } from "./lib/settings-store.mjs";
 import { initMetricsCollector } from "./lib/metrics-collector.mjs";
 
 const pluginVersion = JSON.parse(
@@ -19,13 +20,8 @@ const pluginVersion = JSON.parse(
 
 export default defineApp(async (sdk) => {
   const dataDir = sdk.dataDir;
-  let scanIntervalSec = 60;
-  try {
-    const value = await sdk.config?.get?.("scanInterval");
-    if (typeof value === "number" && value > 0) scanIntervalSec = value;
-  } catch {
-    // 配置读取失败时使用默认扫描间隔。
-  }
+  const currentSettings = await loadSettings(dataDir, sdk.config);
+  const scanIntervalSec = currentSettings.scanInterval;
   const interval = scanIntervalSec * 1000;
   const hostLog = sdk.logger || console;
   const log = Object.fromEntries(
@@ -45,6 +41,7 @@ export default defineApp(async (sdk) => {
     sdk,
     health: new RuntimeHealth({ version: pluginVersion }),
     scanIntervalMs: interval,
+    settings: currentSettings,
     status() { return trackerStatus(shared); },
     lastAttemptAt: null,
     lastSuccessAt: null,
@@ -90,6 +87,7 @@ export default defineApp(async (sdk) => {
     sdk,
     interval,
   });
+  shared.scheduler = scheduler;
   shared.scan = scheduler.scan;
   shared.fullScan = scheduler.fullScan;
   scheduler.start();

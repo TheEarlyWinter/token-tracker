@@ -1,6 +1,7 @@
 ﻿# 运行数据与本地产物
 plugin-data/
 dist/
+outputs/
 *.zip
 *.png
 *.jpg

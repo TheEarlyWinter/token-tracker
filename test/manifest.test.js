@@ -66,8 +66,7 @@ test("Manifest V2 合规性与权限最小化校验", () => {
   assert.ok(fs.existsSync(path.join(rootDir, manifest.icon)), "顶层 icon 文件必须存在");
   assert.ok(fs.existsSync(path.join(rootDir, "ui", card.face.image)), "card face.image 必须存在于 ui/ 下");
 
-  // Settings 校验（非 v1 configuration）
-  assert.ok(manifest.contributes.settings, "必须使用 contributes.settings");
+  // Settings 校验（迁移至插件内部自管，不在宿主全局设置中注入）
+  assert.equal(manifest.contributes.settings, undefined, "插件内部自管设置，不向宿主注入全局 settings 表单");
   assert.ok(!manifest.contributes.configuration, "禁止使用已废弃的 configuration 字段");
-  assert.equal(typeof manifest.contributes.settings.schema?.properties?.scanInterval, "object");
 });

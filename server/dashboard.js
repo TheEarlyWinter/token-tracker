@@ -8,6 +8,7 @@ import { applyDashboardOptions } from "../lib/dashboard-options.mjs";
 import { renderDashboardHtml } from "../lib/dashboard-page.mjs";
 import { openTurnsStore, queryTurns, queryTurnSizes } from "../runtime/engine/services/turns-store.js";
 import { saveTurnsExport } from "../lib/turns-export.mjs";
+import { loadSettings, saveSettings } from "../lib/settings-store.mjs";
 import { buildDetailsCSV } from "../runtime/engine/services/details-csv.js";
 import { buildVisualAnalytics } from "../runtime/engine/services/visual-analytics.js";
 const UI_VERSION = JSON.parse(fs.readFileSync(new URL('../manifest.json', import.meta.url), 'utf8')).version;
@@ -448,6 +449,33 @@ export default function (app, ctx) {
   };
 
   // 余额配置 GET / POST（带掩码保护）
+  const handleGetSettings = async (c) => {
+    try {
+      const dataDir = ctx.dataDir || ctx._tokenCache?.dataDir || "";
+      const settings = ctx._tokenCache?.settings || await loadSettings(dataDir, ctx.config);
+      return c.json(settings);
+    } catch (err) {
+      return c.json({ error: "获取设置失败: " + err.message }, 500);
+    }
+  };
+
+  const handlePostSettings = async (c) => {
+    try {
+      const body = await c.req.json();
+      const dataDir = ctx.dataDir || ctx._tokenCache?.dataDir || "";
+      const updated = await saveSettings(dataDir, body);
+      if (ctx._tokenCache) {
+        ctx._tokenCache.settings = updated;
+        if (ctx._tokenCache.scheduler?.updateInterval) {
+          ctx._tokenCache.scheduler.updateInterval(updated.scanInterval * 1000);
+        }
+      }
+      return c.json({ ok: true, settings: updated });
+    } catch (err) {
+      return c.json({ error: "保存设置失败: " + err.message }, 500);
+    }
+  };
+
   const handleGetBalanceApis = (c) => {
     const tk = ctx._tokenCache;
     const raw = loadBalanceApis(tk?.dataDir || "");
@@ -756,6 +784,11 @@ export default function (app, ctx) {
   app.get("/balance-apis", handleGetBalanceApis);
   app.post("/dashboard/balance-apis", handlePostBalanceApis);
   app.post("/balance-apis", handlePostBalanceApis);
+
+  app.get("/dashboard/settings", handleGetSettings);
+  app.get("/settings", handleGetSettings);
+  app.post("/dashboard/settings", handlePostSettings);
+  app.post("/settings", handlePostSettings);
 
   app.get("/dashboard/session/detail", handleSessionDetail);
   app.get("/session/detail", handleSessionDetail);
