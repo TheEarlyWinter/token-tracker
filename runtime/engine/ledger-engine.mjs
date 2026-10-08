@@ -10,8 +10,17 @@ const CACHE_FILE = "token-cache.json";
 const ARCHIVE_FILE = "usage-archive.json";
 const CACHE_VERSION = 20;
 const MAX_LEDGER_LIMIT = 20000;
-const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" });
-const hourFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", hour: "2-digit", hour12: false });
+
+function resolveTimeZone() {
+  try {
+    return process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai";
+  } catch {
+    return "Asia/Shanghai";
+  }
+}
+const appTimeZone = resolveTimeZone();
+const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: appTimeZone });
+const hourFmt = new Intl.DateTimeFormat("en-CA", { timeZone: appTimeZone, hour: "2-digit", hour12: false });
 const noop = () => {};
 
 function asLog(log) {

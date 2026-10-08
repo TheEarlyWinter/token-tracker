@@ -49,7 +49,7 @@ async function fetchDeepSeekBalance(force = false) {
   return await res.json();
 }
 
-async function loadAndRender(force = false) {
+export async function loadAndRender(force = false) {
   const codexSection = document.getElementById("fp-codex-section");
   const dsSection = document.getElementById("fp-deepseek-section");
   const emptyNotice = document.getElementById("fp-empty-notice");
@@ -97,6 +97,21 @@ async function loadAndRender(force = false) {
       } else if (res.type === "deepseek") {
         if (res.data) renderDeepSeekCard(dsSlot, res.data);
         else renderDeepSeekCard(dsSlot, { connected: false, message: "余额加载失败" });
+      }
+    }
+
+    const hasVisibleSection = (codexSection && codexSection.style.display !== "none") ||
+                              (dsSection && dsSection.style.display !== "none");
+    if (emptyNotice) {
+      if (!hasVisibleSection) {
+        emptyNotice.style.display = "";
+        const noticeText = (!showCodex && !showDeepseek)
+          ? "已在设置中关闭功能面板卡片"
+          : "暂无可展示的卡片（可前往设置开启或配置）";
+        const quietEl = emptyNotice.querySelector(".sb-codex-quiet");
+        if (quietEl) quietEl.textContent = noticeText;
+      } else {
+        emptyNotice.style.display = "none";
       }
     }
   } finally {

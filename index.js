@@ -123,6 +123,11 @@ export default defineApp(async (sdk) => {
 
     scheduler.stop();
 
+    if (shared.turnsStore?.close) {
+      try { shared.turnsStore.close(); } catch {}
+      shared.turnsStore = null;
+    }
+
     const cleanup = [];
     try {
       if (typeof unsubBus === "function") cleanup.push(Promise.resolve(unsubBus()));

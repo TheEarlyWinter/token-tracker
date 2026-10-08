@@ -74,7 +74,11 @@ test("Manifest V2 合规性与权限最小化校验", () => {
   assert.ok(fs.existsSync(path.join(rootDir, "ui", card.face.image)), "card face.image 必须存在于 ui/ 下");
 
   // 网络声明校验
-  assert.deepEqual(manifest.network?.allowedHosts, ["chatgpt.com", "api.deepseek.com"], "network.allowedHosts 必须包含 chatgpt.com 与 api.deepseek.com");
+  assert.deepEqual(
+    [...(manifest.network?.allowedHosts || [])].sort(),
+    ["api.deepseek.com", "chatgpt.com", "open.er-api.com"].sort(),
+    "network.allowedHosts 必须包含 chatgpt.com、api.deepseek.com 与 open.er-api.com"
+  );
   assert.deepEqual(manifest.network?.methods, ["GET"], "network.methods 仅需 GET");
 
   // Settings 校验（迁移至插件内部自管，不在宿主全局设置中注入）

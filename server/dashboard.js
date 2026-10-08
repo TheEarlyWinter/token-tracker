@@ -126,32 +126,88 @@ function calcCost(price, mv, hour) {
 // 缓存汇率
 let cachedRate = null;
 let lastFetchTime = 0;
+let inFlightFx = null;
 const CACHE_DURATION = 6 * 60 * 60 * 1000;
 
-async function fetchFxRate() {
+function resolveTimeZone() {
+  try {
+    return process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai";
+  } catch {
+    return "Asia/Shanghai";
+  }
+}
+const appTimeZone = resolveTimeZone();
+
+async function fetchFxRate(ctx) {
   const now = Date.now();
   if (cachedRate && (now - lastFetchTime < CACHE_DURATION)) {
     return cachedRate;
   }
-  return new Promise(resolve => {
-    https.get("https://open.er-api.com/v6/latest/USD", { timeout: 3000 }, res => {
-      let body = "";
-      res.on("data", chunk => body += chunk);
-      res.on("end", () => {
+  if (inFlightFx) {
+    if (cachedRate) return cachedRate;
+    return Promise.race([
+      inFlightFx,
+      new Promise((resolve) => setTimeout(() => resolve(null), 1000)),
+    ]);
+  }
+
+  const triggerFetch = async () => {
+    try {
+      let data = null;
+      if (ctx?.network?.fetch) {
+        const resp = await ctx.network.fetch("https://open.er-api.com/v6/latest/USD", {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          timeoutMs: 3000,
+        });
+        if (resp && resp.ok) {
+          data = await resp.json();
+        }
+      } else if (typeof globalThis.fetch === "function") {
+        const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+        const timer = setTimeout(() => controller?.abort(), 3000);
         try {
-          const data = JSON.parse(body);
-          if (data && data.result === "success" && data.rates && data.rates.CNY) {
-            cachedRate = data.rates.CNY;
-            lastFetchTime = now;
-            resolve(cachedRate);
-            return;
+          const resp = await globalThis.fetch("https://open.er-api.com/v6/latest/USD", {
+            signal: controller?.signal,
+          });
+          if (resp && resp.ok) {
+            data = await resp.json();
           }
-        } catch (e) {}
-        resolve(cachedRate || null);
-      });
-    }).on("error", () => resolve(cachedRate || null))
-      .on("timeout", function() { this.destroy(); resolve(cachedRate || null); });
-  });
+        } finally {
+          clearTimeout(timer);
+        }
+      } else {
+        data = await new Promise((resolve) => {
+          https.get("https://open.er-api.com/v6/latest/USD", { timeout: 3000 }, (res) => {
+            let body = "";
+            res.on("data", (chunk) => body += chunk);
+            res.on("end", () => {
+              try { resolve(JSON.parse(body)); } catch { resolve(null); }
+            });
+          }).on("error", () => resolve(null))
+            .on("timeout", function() { this.destroy(); resolve(null); });
+        });
+      }
+      if (data && data.result === "success" && data.rates && data.rates.CNY) {
+        cachedRate = data.rates.CNY;
+        lastFetchTime = Date.now();
+      }
+    } catch {
+      // 保持降级
+    } finally {
+      inFlightFx = null;
+    }
+    return cachedRate;
+  };
+
+  inFlightFx = triggerFetch();
+  if (cachedRate) {
+    return cachedRate;
+  }
+  return Promise.race([
+    inFlightFx,
+    new Promise((resolve) => setTimeout(() => resolve(null), 1000)),
+  ]);
 }
 
 // ── 安全凭据脱敏函数（白名单过滤，不暴露任何私钥/Cookie/路径）──
@@ -179,6 +235,20 @@ function sanitizeBalanceApisForClient(balApis) {
 }
 
 export default function (app, ctx) {
+  let sharedTurnsStore = null;
+  const getTurnsStore = () => {
+    if (ctx._tokenCache?.turnsStore) return ctx._tokenCache.turnsStore;
+    if (sharedTurnsStore) return sharedTurnsStore;
+    if (ctx.dataDir) {
+      sharedTurnsStore = openTurnsStore({ file: path.join(ctx.dataDir, "cache.sqlite") });
+      if (sharedTurnsStore && ctx._tokenCache) {
+        ctx._tokenCache.turnsStore = sharedTurnsStore;
+      }
+      return sharedTurnsStore;
+    }
+    return null;
+  };
+
   const codexQuotaService = new CodexQuotaService({
     bus: ctx.bus,
     network: ctx.network,
@@ -210,7 +280,7 @@ export default function (app, ctx) {
       const to = c.req.query("to") || "";
       const provider = c.req.query("provider") || "";
 
-      const fxRate = await fetchFxRate();
+      const fxRate = await fetchFxRate(ctx);
       const result = build(cache.data, range, { agent, model, type, provider, from, to }, fxRate);
 
       // Agent 名称与状态
@@ -626,7 +696,7 @@ export default function (app, ctx) {
   const handleTurns = async (c) => {
     try {
       const cache = ctx._tokenCache;
-      const store = cache?.turnsStore || openTurnsStore({ file: path.join(ctx.dataDir || "", "cache.sqlite") });
+      const store = getTurnsStore();
       const from = c.req.query("from") || "";
       const to = c.req.query("to") || "";
       const agent = c.req.query("agent") || "";
@@ -711,7 +781,7 @@ export default function (app, ctx) {
   // 轮次明细 CSV 导出接口
   const getTurnsCsv = (c) => {
     const cache = ctx._tokenCache;
-    const store = cache?.turnsStore || openTurnsStore({ file: path.join(ctx.dataDir || "", "cache.sqlite") });
+    const store = getTurnsStore();
     const from = c.req.query("from") || "";
     const to = c.req.query("to") || "";
     const agent = c.req.query("agent") || "";
@@ -855,6 +925,15 @@ export default function (app, ctx) {
 
 // ─── 数据聚合与统计逻辑 ───
 function build(cache, range = "all", filters = {}, fxRate = null) {
+  const appTimeZone = (() => {
+    try {
+      return (typeof process !== "undefined" && process?.env?.TZ) ||
+             (typeof Intl !== "undefined" && Intl?.DateTimeFormat?.().resolvedOptions?.().timeZone) ||
+             "Asia/Shanghai";
+    } catch {
+      return "Asia/Shanghai";
+    }
+  })();
   const priceTable = loadPriceTable(cache.dataDir || "");
   let sessions = Object.values(cache.sessions || {});
   let earliest = null;
@@ -867,7 +946,7 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
 
   let dateFilter = null;
   const now = new Date();
-  const cnTodayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" }).format(now);
+  const cnTodayStr = new Intl.DateTimeFormat("en-CA", { timeZone: appTimeZone }).format(now);
 
   if (range === "today") {
     dateFilter = (d) => d === cnTodayStr;
@@ -875,7 +954,7 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
     const day = now.getDay();
     const ws = new Date(now);
     ws.setDate(ws.getDate() - ((day + 6) % 7));
-    const weekStart = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" }).format(ws);
+    const weekStart = new Intl.DateTimeFormat("en-CA", { timeZone: appTimeZone }).format(ws);
     dateFilter = (d) => d >= weekStart;
   } else if (range === "month") {
     const monthStart = cnTodayStr.slice(0, 7) + "-01";
@@ -1105,6 +1184,15 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
 function buildPredictionResponse(cache, daily) {
   const p = cache.prediction;
   if (!p) return null;
+  const appTimeZone = (() => {
+    try {
+      return (typeof process !== "undefined" && process?.env?.TZ) ||
+             (typeof Intl !== "undefined" && Intl?.DateTimeFormat?.().resolvedOptions?.().timeZone) ||
+             "Asia/Shanghai";
+    } catch {
+      return "Asia/Shanghai";
+    }
+  })();
   const base = {
     dailyAvg: p.dailyAvg,
     monthToDate: p.monthToDate,
@@ -1115,7 +1203,7 @@ function buildPredictionResponse(cache, daily) {
 
   const now = new Date();
   const cnParts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",
+    timeZone: appTimeZone,
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -1130,7 +1218,7 @@ function buildPredictionResponse(cache, daily) {
   const pCur = p.cumulativePct[curHour];
   const pNow = pPrev + (pCur - pPrev) * (curMinute / 60);
 
-  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" }).format(now);
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: appTimeZone }).format(now);
   const todayEntry = daily.find((d) => d.date === today);
   const todayTokens = todayEntry ? todayEntry.totalTokens : 0;
 

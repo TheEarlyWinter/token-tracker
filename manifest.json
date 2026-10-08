@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "token-tracker",
   "name": "Token 用量",
-  "version": "6.5.11",
+  "version": "6.6.0",
   "minAppVersion": "0.1050.9",
   "description": "展示所有 Agent 的 Token 消耗统计，支持按时间、Agent、模型筛选和下钻。",
   "entry": "index.js",
@@ -10,7 +10,8 @@
   "network": {
     "allowedHosts": [
       "chatgpt.com",
-      "api.deepseek.com"
+      "api.deepseek.com",
+      "open.er-api.com"
     ],
     "methods": [
       "GET"
@@ -48,7 +49,7 @@
         "id": "token-tracker-dashboard",
         "title": "Token 用量",
         "description": "Agent Token 消耗统计仪表盘",
-        "route": "/dashboard-v6.5.11.html",
+        "route": "/dashboard-v6.6.0.html",
         "realization": "page",
         "siteNavEntry": true,
         "fpFullPanel": true,

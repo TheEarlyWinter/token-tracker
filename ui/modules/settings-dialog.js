@@ -24,7 +24,12 @@ export function initSettingsDialog({ onThemeChange, onSettingsSaved, fetchFn } =
       try {
         const res = await fetchFn("/settings");
         if (res && res.ok) {
-          const data = await res.json();
+          let data = null;
+          try {
+            data = await res.json();
+          } catch {
+            data = null;
+          }
           if (data && typeof data.scanInterval === "number") {
             currentSettings = data;
             if (scanInput) scanInput.value = String(data.scanInterval);
@@ -96,9 +101,15 @@ export function initSettingsDialog({ onThemeChange, onSettingsSaved, fetchFn } =
             showDeepseekBalance,
           }),
         });
-        const result = await res.json();
-        if (!res.ok || result.error) {
-          throw new Error(result.error || "保存失败");
+        let result = null;
+        try {
+          result = await res.json();
+        } catch {
+          result = null;
+        }
+        if (!res.ok || result?.error) {
+          const detail = result?.error || (res?.status ? `保存失败 (${res.status}${res.statusText ? ` ${res.statusText}` : ""})` : "保存失败，响应异常");
+          throw new Error(detail);
         }
         currentSettings = result.settings || {
           scanInterval: scanVal,
