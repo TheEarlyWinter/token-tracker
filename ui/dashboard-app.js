@@ -147,8 +147,8 @@ function updateFilterOpts() {
   if(agentList.length) {
     var h='<div class="cs-opt'+(_selAgent===""?" sel":"")+'" data-v="">全部 Agent</div>';
     agentList.forEach(function(a){
+      if(a.deleted) return;
       var n=(D && D.agentNames && D.agentNames[a.id]) || a.name || a.id;
-      if(a.deleted) n+='（历史 Agent）';
       h+='<div class="cs-opt'+(_selAgent===a.id?" sel":"")+'" data-v="'+escHTML(a.id)+'">'+escHTML(n)+'</div>';
     });
     la.innerHTML=h;
@@ -158,8 +158,9 @@ function updateFilterOpts() {
     var providerList=_allProviders||D.providerOptions||D.providers||[];
     providerList.forEach(function(p){
       if(!p.provider||seen[p.provider])return;
+      if(p.state==="historical")return;
       seen[p.provider]=1;
-      var n=_pn(p.provider)+(p.state==="historical"?"（历史配置）":"");
+      var n=_pn(p.provider);
       ph+='<div class="cs-opt'+(_selProvider===p.provider?" sel":"")+'" data-v="'+escHTML(p.provider)+'">'+escHTML(n)+'</div>';
     });
     lp.innerHTML=ph;

@@ -967,19 +967,16 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
     ...d,
   })).sort((a, b) => b.totalTokens - a.totalTokens);
 
-  // 全量 Agent 选项（包含系统已注册 Agent + 历史会话中产生过账本的 Agent）
-  const allAgentIds = new Set([
-    ...Object.keys(cache.agentNames || {}),
-    ...Object.values(cache.sessions || {}).map((s) => s.agent).filter(Boolean),
-  ]);
-  const agentOptions = Array.from(allAgentIds).map((id) => ({
-    id,
-    name: cache.agentNames?.[id] || id,
-    deleted: !(cache.agentNames && Object.prototype.hasOwnProperty.call(cache.agentNames, id)),
-  })).sort((a, b) => {
-    if (a.deleted !== b.deleted) return a.deleted ? 1 : -1;
-    return a.name.localeCompare(b.name, "zh-CN");
-  });
+  // 侧边栏 Agent 筛选选项：只保留当前已注册的 Agent，不展示历史已删除/已停用 Agent
+  const configuredAgentNames = cache.agentNames || {};
+  const configuredAgentIds = Object.keys(configuredAgentNames);
+  const activeAgentList = (configuredAgentIds.length > 0 ? configuredAgentIds : Object.keys(agentMap))
+    .map((id) => ({
+      id,
+      name: configuredAgentNames[id] || id,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
+  const agentOptions = activeAgentList;
 
   const modelOptions = Array.from(new Set(sessionPool.flatMap((s) => Object.keys(s.models || {})))).sort();
   const providerOptions = [...new Set(Object.values(cache.sessions || {}).flatMap(s => Object.values(s.providers || {}).map(p => p.provider)).filter(Boolean))].map(provider => ({provider}));

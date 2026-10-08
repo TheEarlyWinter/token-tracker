@@ -66,7 +66,7 @@ test('supplier dropdown uses stable catalog and models use current configuration
  const widgets=Object.fromEntries(['sa','sp','sm'].map(id=>[id,{list:{innerHTML:''},text:{textContent:''},querySelector(selector){return selector==='.cs-list'?this.list:this.text}}]));
  Object.assign(ctx,{$:id=>widgets[id],_selAgent:'',_selProvider:'',_selModel:'',_allAgents:[],_allProviders:ctx.D.providerOptions,_allModels:[{id:'qwen3.8-flash'},{id:'unknown'}],_pn:id=>id,window:{TokenTrackerModelOptions:globalThis.TokenTrackerModelOptions}});
  vm.runInContext(extract('updateFilterOpts'),ctx);vm.runInContext('updateFilterOpts()',ctx);
- assert.match(widgets.sp.list.innerHTML,/data-v="live"/);assert.match(widgets.sp.list.innerHTML,/data-v="past"/);assert.match(widgets.sp.list.innerHTML,/历史配置/);
+ assert.match(widgets.sp.list.innerHTML,/data-v="live"/);assert.doesNotMatch(widgets.sp.list.innerHTML,/data-v="past"/);assert.doesNotMatch(widgets.sp.list.innerHTML,/历史配置/);
  assert.match(widgets.sm.list.innerHTML,/active/);assert.doesNotMatch(widgets.sm.list.innerHTML,/qwen3.8-flash|unknown/);
 });
 test('historical token detail remains visible with an explicit label and zero-token unknown is not a model row',()=>{

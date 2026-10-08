@@ -66,9 +66,9 @@ test("server dashboard returns complete agentOptions even under single-day range
   assert.equal(data.agents.length, 1);
   assert.equal(data.agents[0].id, "gemini-coder");
 
-  // 但 agentOptions 必须包含全部 6 个注册 Agent + 1 个历史 Agent = 7 个选项！
+  // 但 agentOptions 必须只包含当前注册的 6 个 Agent，不包含已移除的 retired-agent！
   assert.ok(Array.isArray(data.agentOptions), "必须返回 agentOptions");
-  assert.equal(data.agentOptions.length, 7);
+  assert.equal(data.agentOptions.length, 6);
 
   const ids = data.agentOptions.map((a) => a.id);
   assert.ok(ids.includes("gemini-coder"));
@@ -77,12 +77,8 @@ test("server dashboard returns complete agentOptions even under single-day range
   assert.ok(ids.includes("cixiaogui"));
   assert.ok(ids.includes("hakimi"));
   assert.ok(ids.includes("hanako"));
-  assert.ok(ids.includes("retired-agent"));
-
-  const retired = data.agentOptions.find((a) => a.id === "retired-agent");
-  assert.equal(retired.deleted, true, "已移除的 Agent 必须标记为 deleted");
+  assert.ok(!ids.includes("retired-agent"), "已移除的历史 Agent 不进入下拉筛选选项");
 
   const luna = data.agentOptions.find((a) => a.id === "luna-tester");
-  assert.equal(luna.deleted, false);
   assert.equal(luna.name, "Luna 质检测试");
 });
