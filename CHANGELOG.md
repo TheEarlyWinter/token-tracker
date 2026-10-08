@@ -1,6 +1,6 @@
 ## 6.5.8
 
-- 宿主功能面板（Function Panel）适配与 Codex 额度挂载：在 `manifest.json` 主整页卡声明 `functionPanel`（`/function-panel.html`）与 `fpFullPanel: true`，彻底替换宿主侧边面板的默认空状态“此页尚无清单”，实现 Codex 额度（5小时、本周、重置卡）在 Hana 宿主侧边功能面板上的原生常驻呈现与 60s 防刷同步。
+- 宿主功能面板（Function Panel）适配与 Codex 额度挂载：在 `manifest.json` 主整页卡声明 `functionPanel`（`/function-panel.html`）与 `fpFullPanel: true`，彻底替换宿主侧边面板的默认空状态“此页尚无清单”，实现 Codex 额度（5小时、本周、重置卡）在 Hana 宿主侧边功能面板上的原生常驻呈现与 60s 防刷同步；同时移除看板内部侧边栏下方重复挂载的微卡，消除视觉冗余。
 
 ## 6.5.7
 
