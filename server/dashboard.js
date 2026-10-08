@@ -129,14 +129,7 @@ let lastFetchTime = 0;
 let inFlightFx = null;
 const CACHE_DURATION = 6 * 60 * 60 * 1000;
 
-function resolveTimeZone() {
-  try {
-    return process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai";
-  } catch {
-    return "Asia/Shanghai";
-  }
-}
-const appTimeZone = resolveTimeZone();
+const appTimeZone = (typeof process !== "undefined" && process?.env?.TOKEN_TRACKER_FORCE_TZ) || "Asia/Shanghai";
 
 async function fetchFxRate(ctx) {
   const now = Date.now();
@@ -925,15 +918,7 @@ export default function (app, ctx) {
 
 // ─── 数据聚合与统计逻辑 ───
 function build(cache, range = "all", filters = {}, fxRate = null) {
-  const appTimeZone = (() => {
-    try {
-      return (typeof process !== "undefined" && process?.env?.TZ) ||
-             (typeof Intl !== "undefined" && Intl?.DateTimeFormat?.().resolvedOptions?.().timeZone) ||
-             "Asia/Shanghai";
-    } catch {
-      return "Asia/Shanghai";
-    }
-  })();
+  const appTimeZone = (typeof process !== "undefined" && process?.env?.TOKEN_TRACKER_FORCE_TZ) || "Asia/Shanghai";
   const priceTable = loadPriceTable(cache.dataDir || "");
   let sessions = Object.values(cache.sessions || {});
   let earliest = null;
@@ -1184,15 +1169,7 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
 function buildPredictionResponse(cache, daily) {
   const p = cache.prediction;
   if (!p) return null;
-  const appTimeZone = (() => {
-    try {
-      return (typeof process !== "undefined" && process?.env?.TZ) ||
-             (typeof Intl !== "undefined" && Intl?.DateTimeFormat?.().resolvedOptions?.().timeZone) ||
-             "Asia/Shanghai";
-    } catch {
-      return "Asia/Shanghai";
-    }
-  })();
+  const appTimeZone = (typeof process !== "undefined" && process?.env?.TOKEN_TRACKER_FORCE_TZ) || "Asia/Shanghai";
   const base = {
     dailyAvg: p.dailyAvg,
     monthToDate: p.monthToDate,

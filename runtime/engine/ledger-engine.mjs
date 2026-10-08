@@ -11,14 +11,7 @@ const ARCHIVE_FILE = "usage-archive.json";
 const CACHE_VERSION = 20;
 const MAX_LEDGER_LIMIT = 20000;
 
-function resolveTimeZone() {
-  try {
-    return process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai";
-  } catch {
-    return "Asia/Shanghai";
-  }
-}
-const appTimeZone = resolveTimeZone();
+const appTimeZone = process.env.TOKEN_TRACKER_FORCE_TZ || "Asia/Shanghai";
 const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: appTimeZone });
 const hourFmt = new Intl.DateTimeFormat("en-CA", { timeZone: appTimeZone, hour: "2-digit", hour12: false });
 const noop = () => {};
