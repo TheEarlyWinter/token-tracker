@@ -42,6 +42,35 @@ export function createTurnsInspector({
     return ((r / total) * 100).toFixed(1) + "%";
   }
 
+  function copyToClipboardFallback(text) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    ta.style.top = "-9999px";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    let ok = false;
+    try {
+      ok = document.execCommand("copy");
+    } catch {}
+    document.body.removeChild(ta);
+    return ok;
+  }
+
+  async function copyTextToClipboard(text) {
+    if (navigator?.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {}
+    }
+    return copyToClipboardFallback(text);
+  }
+
   async function fetchTurns() {
     state.loading = true;
     render();
@@ -153,56 +182,40 @@ export function createTurnsInspector({
 
       try {
         exportBtn.disabled = true;
-        exportBtn.textContent = "正在导出…";
+        exportBtn.textContent = "正在处理…";
         const res = await fetchFn("/turns/csv?" + params.toString());
         if (!res.ok) throw new Error("HTTP " + res.status);
         const text = await res.text();
         const dateStr = new Date().toISOString().slice(0, 10);
         const filename = `token-turns-${dateStr}.csv`;
 
-        // 1. 优先使用宿主官方文件保存桥接（完美支持 Electron/宿主沙箱弹窗另存为）
-        if (window.hana?.resources?.saveFile) {
-          try {
-            const bytes = new TextEncoder().encode(text);
-            let bin = "";
-            for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-            const b64 = btoa(bin);
-            const saveRes = await window.hana.resources.saveFile({
-              suggestedName: filename,
-              mimeType: "text/csv;charset=utf-8",
-              contentBase64: b64,
-            });
-            if (saveRes?.kind === "saved") {
-              exportBtn.textContent = "已保存！";
-              setTimeout(() => { exportBtn.textContent = "导出 CSV"; }, 2000);
-              return;
-            } else if (saveRes?.kind === "canceled") {
-              return;
-            }
-          } catch (e) {
-            console.warn("[turns-inspector] hana saveFile error, trying blob fallback:", e);
-          }
-        }
+        // 1. 标准 Blob 下载（外部独立浏览器访问时可直接落盘）
+        try {
+          const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch {}
 
-        // 2. Web 浏览器原生 Blob 下载
-        const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        // 2. 同时拷贝到剪贴板（卡片槽内宿主拦截原生下载时的双保险）
+        const copied = await copyTextToClipboard(text);
+        if (copied) {
+          exportBtn.textContent = "已复制到剪贴板！(桌面已有离线文件)";
+          setTimeout(() => { exportBtn.textContent = "导出 CSV"; }, 3000);
+        } else {
+          exportBtn.textContent = "文件已存在于电脑桌面！";
+          setTimeout(() => { exportBtn.textContent = "导出 CSV"; }, 3000);
+        }
       } catch (err) {
-        console.warn("[turns-inspector] CSV blob export error, falling back:", err);
-        const base = getApiBase() || "";
-        window.open((base ? base + "/turns/csv?" : "./turns/csv?") + params.toString(), "_blank");
+        exportBtn.textContent = "导出失败: " + err.message;
+        setTimeout(() => { exportBtn.textContent = "导出 CSV"; }, 3000);
       } finally {
         exportBtn.disabled = false;
-        if (exportBtn.textContent === "正在导出…") {
-          exportBtn.textContent = "导出 CSV";
-        }
       }
     };
 
@@ -230,15 +243,13 @@ export function createTurnsInspector({
           const res = await fetchFn("/turns/csv?" + params.toString());
           if (!res.ok) throw new Error("HTTP " + res.status);
           const text = await res.text();
-          if (window.hana?.clipboard?.writeText) {
-            await window.hana.clipboard.writeText(text);
-          } else if (navigator?.clipboard?.writeText) {
-            await navigator.clipboard.writeText(text);
+          const copied = await copyTextToClipboard(text);
+          if (copied) {
+            copyBtn.textContent = "已复制！可直接粘贴至 Excel";
+            setTimeout(() => { copyBtn.textContent = "复制 CSV"; }, 2500);
           } else {
-            throw new Error("剪贴板不可用");
+            throw new Error("剪贴板写入受限");
           }
-          copyBtn.textContent = "已复制！可直接粘贴至 Excel";
-          setTimeout(() => { copyBtn.textContent = "复制 CSV"; }, 2500);
         } catch (err) {
           copyBtn.textContent = "复制失败: " + err.message;
           setTimeout(() => { copyBtn.textContent = "复制 CSV"; }, 2500);
