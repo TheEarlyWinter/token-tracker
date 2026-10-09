@@ -17,6 +17,7 @@ import {
 import { renderMediaSection as renderMedia } from "./modules/media-section.js";
 import { createAgentAnalytics } from "./modules/agent-analytics.js";
 import { createTurnsInspector } from "./modules/turns-inspector.js";
+import { renderHeatMatrix } from "./modules/heat-matrix.js";
 
 (function(){
 "use strict";
@@ -206,6 +207,7 @@ $("app").innerHTML =
   '<div id="cards" class="cg"></div>'+
   '<div id="media-section" style="display:none"></div>'+
   '<div class="main-layout"><div class="main-left">'+
+  '<div id="heat-matrix-section"></div>'+
   '<div class="trend-card"><div class="ct" id="tc-title">消耗趋势</div><canvas id="tc"></canvas></div>'+
   '<div class="chart-row"><div class="cx"><div class="ct">模型占比</div><canvas id="mc"></canvas></div>'+
   '<div class="cx"><div class="ct">Agent 消耗对比</div><canvas id="ac"></canvas></div></div>'+
@@ -319,6 +321,7 @@ function render() {
   }
   renderHeadlineCards($("cards"), D.summary, fmt);
   renderMediaSection();
+  renderHeatMatrixSection();
   renderTrend();
   renderModel();
   renderAgent();
@@ -328,6 +331,26 @@ function render() {
 }
 
 let _agentAnalyticsInstance = null;
+function renderHeatMatrixSection() {
+  const el = $("heat-matrix-section");
+  if (!el || !D) return;
+  const dailyData = (Array.isArray(D.daily30) && D.daily30.length > 0) ? D.daily30 : (D.daily || []);
+  const df = $("df"), dt = $("dt");
+  const curSel = (df && dt && df.value && dt.value && df.value === dt.value) ? df.value : "";
+  renderHeatMatrix(el, {
+    dailyData,
+    todayStr: cnToday(),
+    selectedDate: curSel,
+    onDateClick: function(date) {
+      if (!date) return;
+      document.querySelectorAll(".fb").forEach(function(x) { x.classList.toggle("act", false); });
+      if (df) df.value = date;
+      if (dt) dt.value = date;
+      R = "";
+      load();
+    }
+  });
+}
 function renderAgentAnalyticsSection() {
   const el = $("agent-analytics-section");
   if (!el || !D) return;

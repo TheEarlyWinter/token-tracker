@@ -1103,6 +1103,47 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
     ...d,
   })).sort((a, b) => a.date.localeCompare(b.date));
 
+  // 30 天用量热力矩阵数据（不受 range 时间范围截断，但继承当前所选 agent/model/provider/type 筛选）
+  const daily30Map = {};
+  const d30Keys = [];
+  for (let i = 29; i >= 0; i--) {
+    const dObj = new Date(now);
+    dObj.setDate(dObj.getDate() - i);
+    const dateKey = new Intl.DateTimeFormat("en-CA", { timeZone: appTimeZone }).format(dObj);
+    d30Keys.push(dateKey);
+    daily30Map[dateKey] = {
+      date: dateKey,
+      totalTokens: 0,
+      desktop: 0,
+      channel: 0,
+      bridge: 0,
+      background: 0,
+      sub: 0,
+      ledger: 0,
+      cacheRead: 0,
+      assistantCount: 0,
+    };
+  }
+  for (const s of sessions) {
+    for (const [day, bd] of Object.entries(s.dailyBreakdown || {})) {
+      if (!daily30Map[day]) continue;
+      const stats = selectedStats(bd);
+      const dtot = stats.totalTokens || 0;
+      const dcr = stats.cacheRead || 0;
+      const dasst = stats.assistantCount || 0;
+      daily30Map[day].totalTokens += dtot;
+      daily30Map[day].cacheRead += dcr;
+      daily30Map[day].assistantCount += dasst;
+      if (s.type === "desktop") daily30Map[day].desktop += dtot;
+      else if (s.type === "bridge") daily30Map[day].bridge += dtot;
+      else if (s.type === "background") daily30Map[day].background += dtot;
+      else if (s.type === "sub") daily30Map[day].sub += dtot;
+      else if (s.type === "ledger") daily30Map[day].ledger += dtot;
+      else daily30Map[day].channel += dtot;
+    }
+  }
+  const daily30 = d30Keys.map((k) => daily30Map[k]);
+
   // Single-day views use the selected day; other views expose today's hours.
   const hourlyDay = from && from === to ? from : cnTodayStr;
   const hourlyMap = {};
@@ -1159,6 +1200,7 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
     providers: Object.values(providerMap).sort((a,b)=>b.totalTokens-a.totalTokens),
     providerOptions,
     daily,
+    daily30,
     hourly,
     prediction: buildPredictionResponse(cache, daily),
     visualAnalytics: typeof buildVisualAnalytics === "function" ? buildVisualAnalytics(sessions, dateFilter, filters) : null,

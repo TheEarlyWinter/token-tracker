@@ -10,8 +10,10 @@ test("server dashboard returns complete agentOptions even under single-day range
     post: (p, fn) => { routes["POST " + p] = fn; },
   };
 
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" }).format(new Date());
+
   const mockData = {
-    lastScan: "2026-10-08T00:00:00Z",
+    lastScan: today + "T00:00:00Z",
     agentNames: {
       "gemini-coder": "Gemini 编码工程",
       "hakimi": "Hakimi",
@@ -26,7 +28,7 @@ test("server dashboard returns complete agentOptions even under single-day range
         agent: "gemini-coder",
         type: "desktop",
         dailyBreakdown: {
-          "2026-10-08": { totalTokens: 1000, input: 800, output: 200, models: { "m1": { totalTokens: 1000 } } },
+          [today]: { totalTokens: 1000, input: 800, output: 200, models: { "m1": { totalTokens: 1000 } } },
         },
       },
       // 历史会话中存在一个已经被废弃/删除的 agent
@@ -34,7 +36,7 @@ test("server dashboard returns complete agentOptions even under single-day range
         agent: "retired-agent",
         type: "desktop",
         dailyBreakdown: {
-          "2026-09-01": { totalTokens: 500, input: 400, output: 100, models: { "m1": { totalTokens: 500 } } },
+          "2020-01-01": { totalTokens: 500, input: 400, output: 100, models: { "m1": { totalTokens: 500 } } },
         },
       },
     },

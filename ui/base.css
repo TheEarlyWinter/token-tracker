@@ -740,6 +740,197 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
+/* ── 7.1 30 天用量热力矩阵 (.hm-card) ── */
+.hm-card {
+  padding: 16px 20px;
+}
+
+.hm-header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.hm-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.hm-stat-sub {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.hm-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hm-legend-label {
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--text-tertiary);
+  margin: 0 2px;
+  user-select: none;
+}
+
+.hm-legend-cell {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  box-sizing: border-box;
+}
+
+.hm-cell {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 3px;
+  box-sizing: border-box;
+  transition: transform 0.12s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.12s ease, outline-color 0.12s ease;
+  position: relative;
+  cursor: pointer;
+}
+
+/* 5 阶冷蓝色阶（浅色模式） */
+.hm-legend-cell[data-level="0"],
+.hm-cell[data-level="0"] {
+  background: var(--bg-grouped);
+  border: 1px solid var(--card-border);
+}
+
+.hm-legend-cell[data-level="1"],
+.hm-cell[data-level="1"] {
+  background: #D0E2FF;
+  border: 1px solid rgba(0, 122, 255, 0.18);
+}
+
+.hm-legend-cell[data-level="2"],
+.hm-cell[data-level="2"] {
+  background: #8AB4F8;
+  border: 1px solid rgba(0, 122, 255, 0.32);
+}
+
+.hm-legend-cell[data-level="3"],
+.hm-cell[data-level="3"] {
+  background: #3B82F6;
+  border: 1px solid rgba(0, 122, 255, 0.48);
+}
+
+.hm-legend-cell[data-level="4"],
+.hm-cell[data-level="4"] {
+  background: #1D4ED8;
+  border: 1px solid #172554;
+}
+
+/* 5 阶冷蓝色阶（深色模式适配） */
+[data-theme="dark"] .hm-legend-cell[data-level="0"],
+[data-theme="dark"] .hm-cell[data-level="0"],
+[data-hana-theme="midnight"] .hm-legend-cell[data-level="0"],
+[data-hana-theme="midnight"] .hm-cell[data-level="0"] {
+  background: var(--bg-grouped);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .hm-legend-cell[data-level="1"],
+[data-theme="dark"] .hm-cell[data-level="1"],
+[data-hana-theme="midnight"] .hm-legend-cell[data-level="1"],
+[data-hana-theme="midnight"] .hm-cell[data-level="1"] {
+  background: rgba(10, 132, 255, 0.24);
+  border: 1px solid rgba(10, 132, 255, 0.32);
+}
+
+[data-theme="dark"] .hm-legend-cell[data-level="2"],
+[data-theme="dark"] .hm-cell[data-level="2"],
+[data-hana-theme="midnight"] .hm-legend-cell[data-level="2"],
+[data-hana-theme="midnight"] .hm-cell[data-level="2"] {
+  background: rgba(10, 132, 255, 0.48);
+  border: 1px solid rgba(10, 132, 255, 0.58);
+}
+
+[data-theme="dark"] .hm-legend-cell[data-level="3"],
+[data-theme="dark"] .hm-cell[data-level="3"],
+[data-hana-theme="midnight"] .hm-legend-cell[data-level="3"],
+[data-hana-theme="midnight"] .hm-cell[data-level="3"] {
+  background: rgba(10, 132, 255, 0.75);
+  border: 1px solid rgba(10, 132, 255, 0.85);
+}
+
+[data-theme="dark"] .hm-legend-cell[data-level="4"],
+[data-theme="dark"] .hm-cell[data-level="4"],
+[data-hana-theme="midnight"] .hm-legend-cell[data-level="4"],
+[data-hana-theme="midnight"] .hm-cell[data-level="4"] {
+  background: #0A84FF;
+  border: 1px solid #60A5FA;
+}
+
+/* 单元格交互 */
+.hm-cell:hover {
+  transform: scale(1.08);
+  z-index: 2;
+  box-shadow: var(--shadow-sm);
+}
+
+.hm-cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.hm-cell.is-selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  z-index: 3;
+}
+
+.hm-cell.is-today::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* 2 行 × 15 列全宽网格 */
+.hm-grid {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(15, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 6px;
+}
+
+/* 悬浮 Tooltip 样式 */
+.hm-tooltip {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  padding: 5px 9px;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 500;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  box-shadow: var(--shadow-md);
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.12s ease-out, transform 0.12s ease-out;
+}
+
+.hm-tooltip.on {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .trend-card canvas {
   width: 100% !important;
   max-height: 270px;

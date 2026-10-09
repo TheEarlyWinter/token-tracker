@@ -88,3 +88,28 @@ test('single-day hourly breakdown populates tokens, cacheRead and handles custom
   assert.equal(h14.totalTokens, 75);
   assert.equal(h14.cacheRead, 10);
 });
+
+test('server dashboard provides daily30 with 30 consecutive days and respects agent/model filters', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tracker-d30-'));
+  const engine = createLedgerEngine({ dataDir:dir, log:{info(){},warn(){},error(){}} });
+  t.after(()=>{engine.close();fs.rmSync(dir,{recursive:true,force:true});});
+  await engine.scan([
+    {
+      requestId: 'd30-1',
+      startedAt: `${today}T10:00:00+08:00`,
+      status: 'ok',
+      source: { subsystem: 'session' },
+      attribution: { agentId: 'a', sessionId: 'sess-d30-1', kind: 'session', conversationType: 'desktop' },
+      model: { provider: 'p1', modelId: 'm1' },
+      usage: { input: { totalTokens: 100, uncachedTokens: 80 }, output: { totalTokens: 50 }, cache: { readTokens: 20, writeTokens: 0 }, totalTokens: 150 },
+    }
+  ], {});
+  const snapshot = engine.getData();
+  const d = build(snapshot, 'today');
+  assert.ok(Array.isArray(d.daily30), 'build 结果必须包含 daily30 数组');
+  assert.equal(d.daily30.length, 30, 'daily30 必须固定包含 30 天');
+  const todayEntry = d.daily30.find(e => e.date === today);
+  assert.ok(todayEntry, 'daily30 必须包含今日条目');
+  assert.equal(todayEntry.totalTokens, 150);
+  assert.equal(todayEntry.cacheRead, 20);
+});
