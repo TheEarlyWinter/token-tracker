@@ -562,6 +562,17 @@ body {
 }
 
 /* ── 5. 运行状态详情面板 (.runtime-health) ── */
+.source-notice {
+  margin: 0 0 16px 0;
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--orange, #f59e0b) 12%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--orange, #f59e0b) 30%, transparent);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
 .runtime-health {
   margin-bottom: 20px;
   padding: 10px 16px;
@@ -684,6 +695,11 @@ body {
 .cd-hitrate .cd-tag {
   background: color-mix(in srgb, var(--green) 15%, transparent);
   color: var(--green);
+}
+
+.cd-code .cd-tag {
+  background: color-mix(in srgb, var(--purple, #8b5cf6) 15%, transparent);
+  color: var(--purple, #8b5cf6);
 }
 
 .cd .cv {
@@ -1836,6 +1852,22 @@ body {
   border-radius: 4px;
   font-size: 11px;
   font-weight: 500;
+}
+
+.source-tag {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  background: var(--bg-tag);
+  color: var(--text-secondary);
+}
+
+.source-tag.source-code {
+  background: color-mix(in srgb, var(--purple, #8b5cf6) 15%, transparent);
+  color: var(--purple, #8b5cf6);
 }
 
 .provider-prefix {

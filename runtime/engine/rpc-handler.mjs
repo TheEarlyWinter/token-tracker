@@ -17,6 +17,37 @@ function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+const MAX_SOURCE_IDS = 256;
+
+// 只接受安全形状：会话 ID → namespace 字符串；不带任何会话内容字段。
+function sanitizeSessionNamespaces(input) {
+  const out = Object.create(null);
+  if (!isObject(input)) return out;
+  let count = 0;
+  for (const [sessionId, namespace] of Object.entries(input)) {
+    if (count >= MAX_SOURCE_IDS) break;
+    if (typeof sessionId !== "string" || !sessionId || sessionId.length > 256) continue;
+    if (sessionId === "__proto__" || sessionId === "constructor" || sessionId === "prototype") continue;
+    if (typeof namespace !== "string" || !namespace || namespace.length > 64) continue;
+    count++;
+    out[sessionId] = namespace;
+  }
+  return out;
+}
+
+function sanitizeSourceResolution(input) {
+  if (!isObject(input)) return null;
+  const failed = Array.isArray(input.failedSessionIds) ? input.failedSessionIds : [];
+  const failedSessionIds = [];
+  for (const sessionId of failed.slice(0, MAX_SOURCE_IDS)) {
+    if (typeof sessionId === "string" && sessionId && sessionId.length <= 256) failedSessionIds.push(sessionId);
+  }
+  return {
+    capability: input.capability === "unavailable" ? "unavailable" : "ready",
+    failedSessionIds,
+  };
+}
+
 export function createRpcDispatcher({ getEngine, getInitError = () => null } = {}) {
   let pending = null;
   let job = null;
@@ -48,6 +79,8 @@ export function createRpcDispatcher({ getEngine, getInitError = () => null } = {
         agentNames,
         coverageLimitReached: payload.coverageLimitReached === true,
         usageQueryError: typeof payload.usageQueryError === "string" ? payload.usageQueryError.slice(0, 500) : null,
+        sessionNamespaces: sanitizeSessionNamespaces(payload.sessionNamespaces),
+        sourceResolution: sanitizeSourceResolution(payload.sourceResolution),
       };
       return { accepted: true, scanId: pending.scanId };
     }
@@ -86,6 +119,12 @@ export function createRpcDispatcher({ getEngine, getInitError = () => null } = {
 
     if (method === "cache.page") {
       return engine.page(payload);
+    }
+
+    if (method === "sessions.candidates") {
+      const limit = Number(payload.limit);
+      const recent = Array.isArray(payload.recent) ? payload.recent : [];
+      return engine.sessionCandidates({ limit: Number.isFinite(limit) ? limit : 24, recent });
     }
 
     throw Object.assign(new Error("unknown method"), { code: "UNKNOWN_METHOD" });

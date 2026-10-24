@@ -11,6 +11,7 @@ import {
   handleLegacyTokenUsageEvent,
 } from "./lib/realtime-stream.mjs";
 import { createSyncScheduler } from "./lib/sync-scheduler.mjs";
+import { createSessionSourceResolver } from "./lib/session-sources.mjs";
 import { loadSettings } from "./lib/settings-store.mjs";
 import { initMetricsCollector } from "./lib/metrics-collector.mjs";
 
@@ -80,12 +81,17 @@ export default defineApp(async (sdk) => {
 
   await refreshAgentNames(shared);
 
+  // 会话来源（Code）识别：官方 session:get 的有界查询与正负缓存
+  const sourceResolver = createSessionSourceResolver({ sdk, client, dataDir, log });
+  shared.sourceResolver = sourceResolver;
+
   // 账本同步调度服务
   const scheduler = createSyncScheduler({
     shared,
     client,
     sdk,
     interval,
+    sourceResolver,
   });
   shared.scheduler = scheduler;
   shared.scan = scheduler.scan;
@@ -141,6 +147,7 @@ export default defineApp(async (sdk) => {
     shared._realtimeClients.clear();
 
     cleanup.push(client.dispose());
+    cleanup.push(Promise.resolve().then(() => sourceResolver.dispose()));
     cleanup.push(metrics.dispose());
 
     shared.disposePromise = Promise.allSettled(cleanup).then((results) => {

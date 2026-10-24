@@ -284,10 +284,13 @@ export function createTurnsInspector({
           const totalInput = uncached + cacheRead;
           const hit = fmtPct(cacheRead, uncached);
           const timeStr = r.at ? formatTime(r.at) : r.day || "—";
+          const sourceTagHtml = r.type
+            ? `<span class="source-tag source-${escapeHtml(r.type)}">${escapeHtml(r.type === "code" ? "Code" : r.type === "channel" ? "频道" : r.type === "desktop" ? "聊天" : r.type)}</span>`
+            : "";
           return `
             <tr>
               <td class="col-time" title="${escapeHtml(r.at)}">${escapeHtml(timeStr)}</td>
-              <td class="col-agent"><span class="agent-tag">${escapeHtml(r.agent || "default")}</span></td>
+              <td class="col-agent"><span class="agent-tag">${escapeHtml(r.agent || "default")}</span>${sourceTagHtml}</td>
               <td class="col-model" title="${escapeHtml((r.provider ? r.provider + "/" : "") + r.model)}">
                 <span class="provider-prefix">${escapeHtml(r.provider || "")}</span>
                 <span class="model-name">${escapeHtml(r.model || "—")}</span>

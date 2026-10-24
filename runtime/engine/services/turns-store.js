@@ -27,6 +27,8 @@ const SCHEMA = [
    )`,
   `CREATE INDEX IF NOT EXISTS turns_at ON turns(at)`,
   `CREATE INDEX IF NOT EXISTS turns_day ON turns(day)`,
+  // 派生索引键版本：session_key 统一使用聚合桶键（agent::type::day）。
+  `CREATE TABLE IF NOT EXISTS store_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
 ];
 
 const INSERT_SQL =
@@ -238,44 +240,6 @@ export function createSqliteTurnsStore({ DatabaseSync, file, log = () => {} }) {
     return inserted;
   }
 
-  function backfillFromArchive(entries = {}) {
-    const d = open();
-    const list = Array.isArray(entries) ? entries : Object.values(entries || {});
-    if (!list.length) return 0;
-    let inserted = 0;
-    d.exec("BEGIN");
-    try {
-      d.exec("DELETE FROM turns");
-      const ins = insertStatement(d);
-      for (let i = 0; i < list.length; i++) {
-        const r = list[i];
-        if (!r) continue;
-        const at = r.startedAt || r.endedAt || "";
-        ins.run(
-          r.sessionId || r.requestId || `req-${i}`,
-          i + 1,
-          at,
-          localDay(at),
-          r.agentId || r.agent || "unknown",
-          r.type || "desktop",
-          r.provider || "",
-          r.model || "unknown",
-          num(r.totalTokens),
-          numOrNull(r.inputTokens),
-          numOrNull(r.outputTokens),
-          numOrNull(r.cacheReadTokens),
-          1
-        );
-        inserted++;
-      }
-      d.exec("COMMIT");
-    } catch (e) {
-      try { d.exec("ROLLBACK"); } catch {}
-      throw e;
-    }
-    return inserted;
-  }
-
   function query(opts) {
     if (!db && !fs.existsSync(file)) return { rows: [], total: 0, sumTokens: 0 };
     const o = opts && typeof opts === "object" ? opts : {};
@@ -342,7 +306,23 @@ export function createSqliteTurnsStore({ DatabaseSync, file, log = () => {} }) {
     db = null;
   }
 
-  return { open, replaceSession, removeSession, rebuild, apply, count, backfill, backfillFromArchive, query, queryTurnSizes, close };
+  function getMeta(key) {
+    if (!db && !fs.existsSync(file)) return null;
+    const row = open().prepare("SELECT value FROM store_meta WHERE key = ?").get(String(key));
+    return row?.value ?? null;
+  }
+
+  function setMeta(key, value) {
+    const d = open();
+    if (value == null) {
+      d.prepare("DELETE FROM store_meta WHERE key = ?").run(String(key));
+    } else {
+      d.prepare("INSERT INTO store_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        .run(String(key), String(value));
+    }
+  }
+
+  return { open, replaceSession, removeSession, rebuild, apply, count, backfill, query, queryTurnSizes, getMeta, setMeta, close };
 }
 
 export function queryTurns(store, opts) {

@@ -689,7 +689,7 @@ export default function (app, ctx) {
   const handleTurns = async (c) => {
     try {
       const cache = ctx._tokenCache;
-      const store = getTurnsStore();
+      const store = cache?.data?.turnsIndexReady === false ? null : getTurnsStore();
       const from = c.req.query("from") || "";
       const to = c.req.query("to") || "";
       const agent = c.req.query("agent") || "";
@@ -774,7 +774,7 @@ export default function (app, ctx) {
   // 轮次明细 CSV 导出接口
   const getTurnsCsv = (c) => {
     const cache = ctx._tokenCache;
-    const store = getTurnsStore();
+    const store = cache?.data?.turnsIndexReady === false ? null : getTurnsStore();
     const from = c.req.query("from") || "";
     const to = c.req.query("to") || "";
     const agent = c.req.query("agent") || "";
@@ -1001,6 +1001,7 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
     totalBackground: 0,
     totalSub: 0,
     totalLedger: 0,
+    totalCode: 0,
   };
 
   for (const s of sessions) {
@@ -1014,7 +1015,7 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
       if (!agentMap[a]) {
         agentMap[a] = {
           input: 0, output: 0, totalTokens: 0, cacheRead: 0, assistantCount: 0,
-          desktopTotal: 0, channelTotal: 0, bridgeTotal: 0, backgroundTotal: 0, subTotal: 0, ledgerTotal: 0, models: {},
+          desktopTotal: 0, channelTotal: 0, bridgeTotal: 0, backgroundTotal: 0, subTotal: 0, ledgerTotal: 0, codeTotal: 0, models: {},
         };
       }
       agentMap[a].input += di; agentMap[a].output += dout; agentMap[a].totalTokens += dtot; agentMap[a].cacheRead += dcr;
@@ -1024,10 +1025,11 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
       else if (s.type === "background") agentMap[a].backgroundTotal += dtot;
       else if (s.type === "sub") agentMap[a].subTotal += dtot;
       else if (s.type === "ledger") agentMap[a].ledgerTotal += dtot;
+      else if (s.type === "code") agentMap[a].codeTotal += dtot;
       else agentMap[a].channelTotal += dtot;
 
       if (!dailyMap[day]) {
-        dailyMap[day] = { totalTokens: 0, desktop: 0, channel: 0, bridge: 0, background: 0, sub: 0, ledger: 0, cacheRead: 0, assistantCount: 0 };
+        dailyMap[day] = { totalTokens: 0, desktop: 0, channel: 0, bridge: 0, background: 0, sub: 0, ledger: 0, code: 0, cacheRead: 0, assistantCount: 0 };
       }
       dailyMap[day].totalTokens += dtot; dailyMap[day].cacheRead += dcr;
       dailyMap[day].assistantCount += dasst;
@@ -1036,6 +1038,7 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
       else if (s.type === "background") dailyMap[day].background += dtot;
       else if (s.type === "sub") dailyMap[day].sub += dtot;
       else if (s.type === "ledger") dailyMap[day].ledger += dtot;
+      else if (s.type === "code") dailyMap[day].code += dtot;
       else dailyMap[day].channel += dtot;
 
       sums.totalInput += di; sums.totalOutput += dout; sums.totalTokens += dtot; sums.totalCacheRead += dcr;
@@ -1045,6 +1048,7 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
       else if (s.type === "background") sums.totalBackground += dtot;
       else if (s.type === "sub") sums.totalSub += dtot;
       else if (s.type === "ledger") sums.totalLedger += dtot;
+      else if (s.type === "code") sums.totalCode += dtot;
       else sums.totalChannel += dtot;
 
       for (const [key, stats] of Object.entries(d.providerTotals || {})) {
@@ -1120,6 +1124,7 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
       background: 0,
       sub: 0,
       ledger: 0,
+      code: 0,
       cacheRead: 0,
       assistantCount: 0,
     };
@@ -1139,6 +1144,7 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
       else if (s.type === "background") daily30Map[day].background += dtot;
       else if (s.type === "sub") daily30Map[day].sub += dtot;
       else if (s.type === "ledger") daily30Map[day].ledger += dtot;
+      else if (s.type === "code") daily30Map[day].code += dtot;
       else daily30Map[day].channel += dtot;
     }
   }
@@ -1149,7 +1155,7 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
   const hourlyMap = {};
   for (let h = 0; h < 24; h++) {
     const hs = String(h).padStart(2, "0");
-    hourlyMap[hs] = { hour: hs, totalTokens: 0, desktop: 0, channel: 0, bridge: 0, background: 0, sub: 0, ledger: 0, cacheRead: 0, assistantCount: 0 };
+    hourlyMap[hs] = { hour: hs, totalTokens: 0, desktop: 0, channel: 0, bridge: 0, background: 0, sub: 0, ledger: 0, code: 0, cacheRead: 0, assistantCount: 0 };
   }
   for (const s of sessions) {
     if (dateFilter && !dateFilter(hourlyDay)) continue;
@@ -1167,6 +1173,7 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
       else if (s.type === "background") hourlyMap[hs].background += t;
       else if (s.type === "sub") hourlyMap[hs].sub += t;
       else if (s.type === "ledger") hourlyMap[hs].ledger += t;
+      else if (s.type === "code") hourlyMap[hs].code += t;
       else hourlyMap[hs].channel += t;
     }
   }
@@ -1202,8 +1209,21 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
     daily,
     daily30,
     hourly,
+    sourceClassification: normalizeSourceClassification(cache.sourceClassification),
     prediction: buildPredictionResponse(cache, daily),
     visualAnalytics: typeof buildVisualAnalytics === "function" ? buildVisualAnalytics(sessions, dateFilter, filters) : null,
+  };
+}
+
+// 来源分类完整性：来自完整归档的识别状态，不是最近账本窗口。
+function normalizeSourceClassification(raw) {
+  const status = raw?.status;
+  const unresolved = Number(raw?.unresolvedSessionCount);
+  const unresolvedRecords = Number(raw?.unresolvedRecordCount);
+  return {
+    status: status === "complete" || status === "partial" || status === "unavailable" ? status : "unavailable",
+    unresolvedSessionCount: Number.isFinite(unresolved) && unresolved > 0 ? Math.floor(unresolved) : 0,
+    unresolvedRecordCount: Number.isFinite(unresolvedRecords) && unresolvedRecords > 0 ? Math.floor(unresolvedRecords) : 0,
   };
 }
 

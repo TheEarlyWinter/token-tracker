@@ -91,6 +91,7 @@ export function buildVisualAnalytics(sessions, dateFilter, filters = {}, rows = 
           background: value(b.background),
           ledger: value(b.ledger),
           channel: value(b.channel),
+          code: value(b.code),
         }
       : null;
 

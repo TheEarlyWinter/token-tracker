@@ -3,11 +3,19 @@ import path from "node:path";
 import { openArchiveStore } from "./services/archive-store.js";
 import { createJsonJournalStore } from "./services/json-journal-store.js";
 import { openTurnsStore } from "./services/turns-store.js";
+import { openSessionSourceStore } from "./services/session-sources.js";
 import { normalizeEntryForArchive } from "../../lib/ledger-normalization.mjs";
 export { normalizeEntryForArchive } from "../../lib/ledger-normalization.mjs";
 
 const CACHE_FILE = "token-cache.json";
 const ARCHIVE_FILE = "usage-archive.json";
+const SESSION_SOURCES_FILE = "session-sources.json";
+const MAX_CANDIDATES = 64;
+const MAX_SOURCE_ENTRIES = 256;
+// turns 派生索引键版本：session_key 必须等于聚合缓存桶键。
+const TURNS_INDEX_KEY = "bucket-v1";
+const MAX_PENDING_SOURCES = 256;
+const MAX_NAMESPACE_LENGTH = 64;
 const CACHE_VERSION = 20;
 const MAX_LEDGER_LIMIT = 20000;
 
@@ -39,6 +47,10 @@ function createSession(day) {
     totalTokens: 0, cost: 0, models: {}, providers: {}, conversations: [], mediaGen: {},
     dailyBreakdown: {}, hourlyBreakdown: {}, title: day,
   };
+}
+
+function emptyTypeTotals() {
+  return { totalTokens: 0, desktop: 0, channel: 0, bridge: 0, background: 0, sub: 0, ledger: 0, code: 0 };
 }
 
 function addRecordToBucket(bucket, record, day, hour) {
@@ -102,7 +114,7 @@ function addRecordToBucket(bucket, record, day, hour) {
 
   if (!bucket.dailyBreakdown[day]) {
     bucket.dailyBreakdown[day] = {
-      totalTokens: 0, desktop: 0, channel: 0, bridge: 0, background: 0, sub: 0, ledger: 0,
+      ...emptyTypeTotals(),
       input: 0, inputUncached: 0, output: 0, cacheRead: 0, cacheWrite: 0, assistantCount: 0,
       models: {}, providerTotals: {},
     };
@@ -142,18 +154,19 @@ function addRecordToBucket(bucket, record, day, hour) {
   if (!bucket.hourlyBreakdown[day]) bucket.hourlyBreakdown[day] = {};
   if (!bucket.hourlyBreakdown[day][hour]) {
     bucket.hourlyBreakdown[day][hour] = {
-      totalTokens: 0, desktop: 0, channel: 0, bridge: 0, background: 0, sub: 0, ledger: 0,
+      ...emptyTypeTotals(),
       cacheRead: 0, cacheWrite: 0, assistantCount: 0, models: {}, providerTotals: {},
     };
   }
   const hourly = bucket.hourlyBreakdown[day][hour];
   hourly.totalTokens += total;
   if (hourly[type] !== undefined) hourly[type] += total;
+  else hourly[type] = total;
   hourly.cacheRead += cacheRead;
   hourly.cacheWrite += cacheWrite;
   hourly.assistantCount++;
   if (!hourly.models[model]) {
-    hourly.models[model] = { totalTokens: 0, cacheRead: 0, cacheWrite: 0, assistantCount: 0, desktop: 0, channel: 0, bridge: 0, background: 0, sub: 0, ledger: 0 };
+    hourly.models[model] = { ...emptyTypeTotals(), cacheRead: 0, cacheWrite: 0, assistantCount: 0 };
   }
   const hourlyModel = hourly.models[model];
   hourlyModel.totalTokens += total;
@@ -164,7 +177,7 @@ function addRecordToBucket(bucket, record, day, hour) {
   if (provider) {
     const providerKey = `${provider}/${model}`;
     if (!hourly.providerTotals[providerKey]) {
-      hourly.providerTotals[providerKey] = { totalTokens: 0, cacheRead: 0, cacheWrite: 0, assistantCount: 0, desktop: 0, channel: 0, bridge: 0, background: 0, sub: 0, ledger: 0 };
+      hourly.providerTotals[providerKey] = { ...emptyTypeTotals(), cacheRead: 0, cacheWrite: 0, assistantCount: 0 };
     }
     const stats = hourly.providerTotals[providerKey];
     stats.totalTokens += total;
@@ -176,6 +189,7 @@ function addRecordToBucket(bucket, record, day, hour) {
 }
 
 function aggregateBucket(key, records) {
+  if (!Array.isArray(records) || records.length === 0) return null;
   const parts = key.split("::");
   const day = parts[parts.length - 1] || "";
   const bucket = createSession(day);
@@ -244,21 +258,172 @@ export class LedgerEngine {
     this.log = asLog(log);
     this.cachePath = path.join(dataDir, CACHE_FILE);
     this.archiveStore = openArchiveStore(path.join(dataDir, ARCHIVE_FILE), this.log);
+    this.sourceStore = openSessionSourceStore({ file: path.join(dataDir, SESSION_SOURCES_FILE), log: this.log });
     this.cacheStore = createJsonJournalStore({ file: this.cachePath, log: this.log });
     this.turnsStore = openTurnsStore({ file: path.join(dataDir, "cache.sqlite"), log: this.log });
     const cached = this.cacheStore.load();
     const meta = cached || this.cacheStore.readMeta() || {};
     this.data = { ...meta, sessions: cached?.sessions || {} };
-    if (cached?.sessions && Object.keys(cached.sessions).length > 0 && fs.existsSync(path.join(dataDir, "cache.sqlite"))) {
-      if (this.turnsStore && this.turnsStore.count() === 0) {
-        try { this.turnsStore.rebuild(cached); } catch (e) { this.log.warn?.("[token-tracker] turnsStore initial rebuild failed: " + e.message); }
-      }
-    }
     this.ready = !!cached;
     this.revision = 0;
     this.dirtyBuckets = new Set();
     this.bucketIndex = new Map();
-    for (const record of Object.values(this.archiveStore.entries)) this.indexRecord(record);
+    this.recordKeys = new Map();
+    for (const [rid, record] of Object.entries(this.archiveStore.entries)) {
+      this.applyStoredType(rid, record);
+      this.indexRecord(record);
+    }
+    this.turnsIndexReady = false;
+    this.turnsNeedsRebuild = true;
+    this.checkTurnsReadiness();
+    // 上次写盘停在聚合与代次元数据之间：必须从原始归档重算，不能相信可能半更新的聚合缓存。
+    if (this.data.aggregateWritePending === true) {
+      this.needsFullRebuild = true;
+      this.turnsIndexReady = false;
+      this.turnsNeedsRebuild = true;
+    }
+    this.data.turnsIndexReady = this.turnsIndexReady;
+    // 归档是唯一请求记录源：缓存/索引一旦落后于归档（写盘窗口中断），下一轮必须全量重建。
+    this.needsFullRebuild = this.needsFullRebuild === true || this.archiveCoverageMismatch();
+  }
+
+  validSessionId(value) {
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.length > 256) return null;
+    if (trimmed === "__proto__" || trimmed === "constructor" || trimmed === "prototype") return null;
+    return trimmed;
+  }
+
+  // 持久写入屏障：在任何 source/归档/聚合变更前先将 pending 写卡，避免 journal 变而代次未变。
+  beginAggregateWrite() {
+    if (this.data.aggregateWritePending === true) return;
+    const pending = { ...this.data, aggregateWritePending: true, turnsIndexReady: false };
+    this.cacheStore.saveMeta(pending);
+    this.data = pending;
+  }
+
+  // 仅在聚合、代次与 SQLite 都处理完后才清屏障；最后写失败则保留 pending 供下次恢复。
+  finalizeAggregateWrite(cache) {
+    cache.aggregateWritePending = false;
+    cache.turnsIndexReady = this.turnsIndexReady === true;
+    try {
+      this.cacheStore.saveMeta(cache);
+      return true;
+    } catch (error) {
+      this.log.warn?.("[token-tracker] cache barrier clear failed: " + error.message);
+      cache.aggregateWritePending = true;
+      cache.turnsIndexReady = false;
+      this.turnsIndexReady = false;
+      this.turnsNeedsRebuild = true;
+      try { this.cacheStore.saveMeta(cache); } catch {}
+      return false;
+    }
+  }
+
+  // 数据代次核对：cache.turnsGeneration 与 SQLite data_generation 必须一致，且键标记与内容存在。
+  checkTurnsReadiness() {
+    this.turnsIndexReady = false;
+    this.turnsNeedsRebuild = true;
+    if (!this.turnsStore) return;
+    const hasSessions = Object.keys(this.data.sessions || {}).length > 0;
+    try {
+      if (!hasSessions && !fs.existsSync(path.join(this.dataDir, "cache.sqlite"))) {
+        this.turnsIndexReady = true;
+        this.turnsNeedsRebuild = false;
+        return;
+      }
+      const marker = this.turnsStore.getMeta("index_key");
+      const rawGeneration = this.turnsStore.getMeta("data_generation");
+      const cacheGeneration = Number(this.data.turnsGeneration) || 0;
+      const rows = this.turnsStore.count();
+      // 无聚合会话但留着旧 SQLite：即为陈旧派生行，必须重建清空。
+      if (!hasSessions && rows > 0) return;
+      if (hasSessions && rows === 0) return;
+      if (marker !== TURNS_INDEX_KEY) return;
+      // 旧版本只写过键标记、没有内容代次：不能当作已就绪。
+      if (rawGeneration === null || rawGeneration === undefined) return;
+      const diskGeneration = Number(rawGeneration);
+      if (!Number.isFinite(diskGeneration) || diskGeneration !== cacheGeneration) return;
+      this.turnsIndexReady = true;
+      this.turnsNeedsRebuild = false;
+    } catch (error) {
+      this.log.warn?.("[token-tracker] turns index readiness check failed: " + error.message);
+    }
+  }
+
+  // 只有内容事务与代次写入都成功后才能就绪；否则同进程下一轮强制全量重建。
+  applyTurns(cache, { fullRebuild, dirty }) {
+    if (!this.turnsStore) {
+      this.turnsIndexReady = false;
+      cache.turnsIndexReady = false;
+      return;
+    }
+    const full = fullRebuild || this.turnsNeedsRebuild || !this.turnsIndexReady;
+    let contentOk = false;
+    try {
+      if (full) this.turnsStore.rebuild(cache);
+      else this.turnsStore.apply(cache, { keys: [...dirty] });
+      contentOk = true;
+    } catch (error) {
+      this.log.warn?.("[token-tracker] turnsStore " + (full ? "rebuild" : "apply") + " failed: " + error.message);
+    }
+    if (!contentOk) {
+      this.turnsIndexReady = false;
+      this.turnsNeedsRebuild = true;
+      cache.turnsIndexReady = false;
+    } else {
+      try {
+        this.turnsStore.setMeta("index_key", TURNS_INDEX_KEY);
+        this.turnsStore.setMeta("data_generation", String(cache.turnsGeneration));
+        this.turnsIndexReady = true;
+        this.turnsNeedsRebuild = false;
+        cache.turnsIndexReady = true;
+      } catch (error) {
+        this.log.warn?.("[token-tracker] turns index marker failed: " + error.message);
+        this.turnsIndexReady = false;
+        this.turnsNeedsRebuild = true;
+        cache.turnsIndexReady = false;
+      }
+    }
+    try {
+      this.cacheStore.saveMeta(cache);
+    } catch (error) {
+      this.log.warn?.("[token-tracker] cache meta save failed: " + error.message);
+    }
+  }
+
+  // 缓存/索引是否落后于归档：桶键集合或每桶请求数不一致即需全量重建。
+  archiveCoverageMismatch() {
+    const sessions = this.data.sessions || {};
+    for (const [key, records] of this.bucketIndex) {
+      if ((key.split("::")[0] || "") === "unknown") continue;
+      const session = sessions[key];
+      if (!session) return true;
+      if ((Number(session.msgCount) || 0) !== records.length) return true;
+    }
+    for (const key of Object.keys(sessions)) {
+      if (this.bucketIndex.has(key)) continue;
+      if ((key.split("::")[0] || "") === "unknown") continue;
+      return true;
+    }
+    return false;
+  }
+
+  // 归档记录的目标类型：已确认 namespace=code 时归 code，否则保留归档时的 baseType。
+  resolveRecordType(record) {
+    const baseType = record.baseType || (record.type === "code" ? "desktop" : record.type) || "desktop";
+    if (!record.baseType) record.baseType = baseType;
+    const namespace = record.sessionId ? this.sourceStore.get(record.sessionId) : null;
+    return namespace === "code" ? "code" : baseType;
+  }
+
+  applyStoredType(rid, record) {
+    if (!record) return false;
+    const next = this.resolveRecordType(record);
+    if (next === record.type) return false;
+    record.type = next;
+    return true;
   }
 
   indexRecord(record) {
@@ -266,7 +431,133 @@ export class LedgerEngine {
     let records = this.bucketIndex.get(bucket.key);
     if (!records) this.bucketIndex.set(bucket.key, records = []);
     records.push(record);
+    if (record.requestId) this.recordKeys.set(record.requestId, bucket.key);
     return bucket.key;
+  }
+
+  // 映射变化后，把受影响会话所属的旧桶和新桶都重算；其余桶不动。
+  applyClassification(sessionIds) {
+    const changed = new Set();
+    if (!sessionIds || !sessionIds.size) return changed;
+    for (const [rid, record] of Object.entries(this.archiveStore.entries)) {
+      if (!record) continue;
+      const canonical = this.validSessionId(record.sessionId);
+      if (!canonical || !sessionIds.has(canonical)) continue;
+      const before = record.type;
+      const next = this.resolveRecordType(record);
+      if (next === before) continue;
+      const oldKey = this.recordKeys.get(rid);
+      if (oldKey) {
+        const records = this.bucketIndex.get(oldKey);
+        if (records) {
+          const index = records.indexOf(record);
+          if (index >= 0) records.splice(index, 1);
+        }
+        changed.add(oldKey);
+      }
+      record.type = next;
+      const newKey = bucketFor(record).key;
+      let records = this.bucketIndex.get(newKey);
+      if (!records) this.bucketIndex.set(newKey, records = []);
+      records.push(record);
+      this.recordKeys.set(rid, newKey);
+      changed.add(newKey);
+    }
+    return changed;
+  }
+
+  // 返回本 payload 中已真正持久化的会话 ID（sourceAckSessionIds）；保存失败或仍待写时为空。
+  applySourceResolution(options = {}) {
+    const changed = new Set();
+    const accepted = [];
+    const namespaces = options.sessionNamespaces;
+    if (namespaces && typeof namespaces === "object") {
+      let count = 0;
+      for (const [rawId, rawNamespace] of Object.entries(namespaces)) {
+        if (count >= MAX_SOURCE_ENTRIES) break;
+        count++;
+        const sessionId = this.validSessionId(rawId);
+        const namespace = typeof rawNamespace === "string" ? rawNamespace.trim() : "";
+        if (!sessionId || !namespace || namespace.length > MAX_NAMESPACE_LENGTH) continue;
+        if (this.sourceStore.set(sessionId, namespace)) changed.add(sessionId);
+        if (this.sourceStore.has(sessionId)) accepted.push(sessionId);
+      }
+    }
+    const resolution = options.sourceResolution;
+    if (resolution && typeof resolution === "object") {
+      this.sourceStore.setCapability(resolution.capability);
+      const failed = Array.isArray(resolution.failedSessionIds) ? resolution.failedSessionIds.slice(0, MAX_SOURCE_ENTRIES) : [];
+      for (const sessionId of failed) this.sourceStore.fail(sessionId);
+    }
+    let persisted = true;
+    try {
+      this.sourceStore.save();
+    } catch (error) {
+      // 映射持久化失败只降级来源完整性：账本归档与聚合继续，dirty 保留供下轮重试。
+      persisted = false;
+      this.log.warn?.("[token-tracker] session source cache save failed: " + (error?.code || error?.message || "UNKNOWN"));
+    }
+    const ackIds = !persisted || this.sourceStore.pending ? [] : accepted.slice(0, MAX_PENDING_SOURCES);
+    return { changed, ackIds };
+  }
+
+  unresolvedSessionIds() {
+    const unresolved = new Set();
+    for (const record of Object.values(this.archiveStore.entries)) {
+      const sessionId = this.validSessionId(record?.sessionId);
+      if (!sessionId) continue;
+      if (this.sourceStore.has(sessionId)) continue;
+      unresolved.add(sessionId);
+    }
+    return [...unresolved];
+  }
+
+  // 无合法父会话 ID 的请求数：仍计入总量与原类别，但完整性不能宣称 complete。
+  unresolvedRecordCount() {
+    let count = 0;
+    for (const record of Object.values(this.archiveStore.entries)) {
+      if (!this.validSessionId(record?.sessionId)) count++;
+    }
+    return count;
+  }
+
+  sessionCandidates({ limit, recent } = {}) {
+    const raw = Number(limit);
+    const max = limit === undefined || !Number.isFinite(raw)
+      ? 24
+      : Math.min(Math.max(1, Math.floor(raw)), MAX_CANDIDATES);
+    const now = Date.now();
+    const known = {};
+    const cooling = [];
+    const recentIds = new Set();
+    for (const value of Array.isArray(recent) ? recent.slice(0, MAX_SOURCE_ENTRIES) : []) {
+      const sessionId = this.validSessionId(value);
+      if (!sessionId) continue;
+      recentIds.add(sessionId);
+      if (Object.prototype.hasOwnProperty.call(known, sessionId) || cooling.includes(sessionId)) continue;
+      if (this.sourceStore.has(sessionId)) {
+        known[sessionId] = this.sourceStore.get(sessionId);
+      } else if (this.sourceStore.failedRecently(sessionId, now)) {
+        cooling.push(sessionId);
+      }
+    }
+    const totals = new Map();
+    for (const record of Object.values(this.archiveStore.entries)) {
+      const sessionId = this.validSessionId(record?.sessionId);
+      if (!sessionId) continue;
+      if (recentIds.has(sessionId)) continue;
+      if (this.sourceStore.has(sessionId)) continue;
+      if (this.sourceStore.failedRecently(sessionId, now)) continue;
+      const ts = record.startedAt || record.endedAt || "";
+      const previous = totals.get(sessionId);
+      if (previous === undefined || ts < previous) totals.set(sessionId, ts);
+    }
+    // 历史优先最老且不在冷却中的会话，避免新会话持续到来时饥饿；recent 已在排序/截断前排除。
+    const sessionIds = [...totals.entries()]
+      .sort((a, b) => a[1].localeCompare(b[1]))
+      .slice(0, max)
+      .map(([sessionId]) => sessionId);
+    return { sessionIds, known, cooling };
   }
 
   archiveUsage(raw) {
@@ -274,7 +565,7 @@ export class LedgerEngine {
       return { accepted: false, reason: "invalid_entry" };
     }
     if (this.archiveStore.entries[raw.requestId]) return { accepted: false, reason: "duplicate" };
-    const record = normalizeEntryForArchive(raw);
+    const record = normalizeEntryForArchive(raw, { namespace: this.sourceStore.get(raw.attribution?.sessionId) });
     const key = this.indexRecord(record);
     this.archiveStore.entries[raw.requestId] = record;
     this.dirtyBuckets.add(key);
@@ -285,9 +576,20 @@ export class LedgerEngine {
 
   async scan(entries, options = {}) {
     if (!Array.isArray(entries)) entries = [];
+    // 屏障必须先落盘：失败则本轮不修改任何持久数据。
+    this.beginAggregateWrite();
     const force = options.force === true;
+    const { changed: changedSessions, ackIds } = this.applySourceResolution(options);
+    const reclassified = this.applyClassification(changedSessions);
+    for (const key of reclassified) this.dirtyBuckets.add(key);
     const previous = this.data;
-    const cache = { ...previous, version: CACHE_VERSION, sessions: previous.sessions || {} };
+    const cache = {
+      ...previous,
+      version: CACHE_VERSION,
+      sessions: previous.sessions || {},
+      aggregateWritePending: true,
+      turnsIndexReady: false,
+    };
     if (options.agentNames && Object.keys(options.agentNames).length) {
       cache.agentNames = { ...(options.agentNames || {}), ...(cache.agentNames || {}) };
     }
@@ -296,7 +598,7 @@ export class LedgerEngine {
     for (const raw of entries) {
       if (!raw || typeof raw.requestId !== "string" || !raw.requestId || raw.status !== "ok" || !raw.usage) continue;
       if (this.archiveStore.entries[raw.requestId]) continue;
-      const record = normalizeEntryForArchive(raw);
+      const record = normalizeEntryForArchive(raw, { namespace: this.sourceStore.get(raw.attribution?.sessionId) });
       this.archiveStore.entries[raw.requestId] = record;
       this.dirtyBuckets.add(this.indexRecord(record));
       newArchivedCount++;
@@ -305,7 +607,7 @@ export class LedgerEngine {
     // Always flush pending rows; this also retries an append interrupted by a prior disk error.
     const archiveWrite = this.archiveStore.appendPending();
 
-    const fullRebuild = force || !previous?.sessions || previous.version !== CACHE_VERSION;
+    const fullRebuild = force || this.needsFullRebuild || !previous?.sessions || previous.version !== CACHE_VERSION;
     const dirty = new Set(this.dirtyBuckets);
     if (fullRebuild) {
       for (const key of this.bucketIndex.keys()) dirty.add(key);
@@ -321,23 +623,30 @@ export class LedgerEngine {
     cache.lastScan = new Date().toISOString();
     cache.coverageLimitReached = options.coverageLimitReached ?? (entries.length >= MAX_LEDGER_LIMIT);
     cache.usageQueryError = options.usageQueryError || null;
+    const unresolved = this.unresolvedSessionIds();
+    const unresolvedRecords = this.unresolvedRecordCount();
+    const capability = this.sourceStore.capability;
+    const incomplete = unresolved.length > 0 || unresolvedRecords > 0 || this.sourceStore.pending;
+    cache.sourceClassification = {
+      status: incomplete ? (capability === "unavailable" ? "unavailable" : "partial") : "complete",
+      unresolvedSessionCount: unresolved.length,
+      unresolvedRecordCount: unresolvedRecords,
+    };
     cache.prediction = computePrediction(cache, buildDailyGlobal(cache));
+
+    // 代次：只有真正会改变派生内容的扫描才推进；先落缓存，再写 SQLite（失败时两代不等）。
+    const turnsDirty = fullRebuild || dirty.size > 0;
+    const previousGeneration = Number(previous?.turnsGeneration) || 0;
+    cache.turnsGeneration = turnsDirty ? previousGeneration + 1 : previousGeneration;
+    cache.turnsIndexReady = !turnsDirty && this.turnsIndexReady;
 
     const persistence = this.cacheStore.save(cache, [...dirty], fullRebuild);
     this.cacheStore.saveMeta(cache);
-    if (this.turnsStore) {
-      try {
-        if (this.turnsStore.count() < 100 && this.archiveStore.size() > 0) {
-          this.turnsStore.backfillFromArchive(this.archiveStore.entries);
-        } else {
-          this.turnsStore.apply(cache, { all: fullRebuild, keys: [...dirty] });
-        }
-      } catch (e) {
-        this.log.warn?.("[token-tracker] turnsStore apply failed: " + e.message);
-      }
-    }
+    this.applyTurns(cache, { fullRebuild, dirty });
+    const committed = this.finalizeAggregateWrite(cache);
     this.data = cache;
     this.ready = true;
+    if (committed) this.needsFullRebuild = false;
     this.dirtyBuckets.clear();
     this.revision++;
     this.log.info?.(`[token-tracker] ledger scan: ${entries.length} window entries, ${newArchivedCount} newly archived, ${this.archiveStore.size()} total history.`);
@@ -352,6 +661,8 @@ export class LedgerEngine {
       cacheScope: persistence.scope,
       coverageLimitReached: cache.coverageLimitReached,
       usageQueryError: cache.usageQueryError,
+      sourceClassification: cache.sourceClassification,
+      sourceAckSessionIds: ackIds,
     };
   }
 

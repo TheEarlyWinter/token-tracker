@@ -89,6 +89,7 @@ function chartColors() {
     grid: s.getPropertyValue("--chart-grid").trim(),
     chat: s.getPropertyValue("--chart-bar-chat").trim(),
     channel: s.getPropertyValue("--chart-bar-channel").trim(),
+    code: s.getPropertyValue("--chart-bar-code").trim() || s.getPropertyValue("--purple").trim() || "#8b5cf6",
     doughnut: s.getPropertyValue("--chart-doughnut-colors").trim().split(",").map(c => c.trim()),
     agent: s.getPropertyValue("--chart-agent-colors").trim().split(",").map(c => c.trim()),
     hitRate: s.getPropertyValue("--chart-hit-rate").trim(),
@@ -196,7 +197,7 @@ $("app").innerHTML =
   '<span class="cs" id="sa"><span class="cs-txt">Agent</span><span class="cs-arw">▾</span><div class="cs-list"></div></span>'+
   '<span class="cs" id="sp"><span class="cs-txt">供应商</span><span class="cs-arw">▾</span><div class="cs-list"></div></span>'+
   '<span class="cs" id="sm"><span class="cs-txt">模型</span><span class="cs-arw">▾</span><div class="cs-list"></div></span>'+
-  '<span class="cs" id="stype"><span class="cs-txt">类型</span><span class="cs-arw">▾</span><div class="cs-list"><div class="cs-opt sel" data-v="">全部</div><div class="cs-opt" data-v="desktop">聊天</div><div class="cs-opt" data-v="channel">频道</div></div></span>'+
+  '<span class="cs" id="stype"><span class="cs-txt">类型</span><span class="cs-arw">▾</span><div class="cs-list"><div class="cs-opt sel" data-v="">全部</div><div class="cs-opt" data-v="desktop">聊天</div><div class="cs-opt" data-v="channel">频道</div><div class="cs-opt" data-v="code">Code</div></div></span>'+
   '</div>'+
   '<div id="fx" class="fx-side" style="display:none"></div>'+
   '</div>'+
@@ -204,6 +205,7 @@ $("app").innerHTML =
   '<div class="archive-intro"><span>PERSONAL USAGE ARCHIVE / 01</span><p>把每一次调用，放回工作流里看。</p></div>'+
   '<div class="hdr"><div class="hdr-left"><span class="hdr-title">用量</span><span id="lu">—</span></div><div id="hdrQuota" class="hdr-quota"></div><div class="hdr-right"><button class="btn-icon" id="rf" title="刷新数据"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button><button class="btn-icon" id="th-btn" title="切换深色模式"></button><button class="btn-icon" id="st-btn" title="设置"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button><span class="unit-hint" id="uh">ⓘ</span></div></div>'+
   '<details id="runtime-health" class="runtime-health"><summary id="health-summary">运行状态 · 尚未取得检查结果</summary><div id="health-details"></div><details class="metric-help"><summary>指标与采集范围说明</summary><p>首响：请求发出至 provider 响应元数据到达，不是真正的首 token TTFT。</p><p>速度：输出 token ÷ 完整请求时长，包含等待；优先实时请求计量，无有效实时样本时使用同模型最近 8 条有效账本时长回退，不是流式瞬时速度。</p><p>胶囊缓存率：本会话当前模型最近 50 条记录，按 token 体量加权；看板缓存率维持缓存读 token ÷ 当前筛选范围总 token 的既有口径。</p><p>费用为估算，与供应商账单可能不同。余额查询时间不代表用量同步时间。</p><p id="coverage-help"></p></details><details class="diagnostic-preview"><summary>查看诊断摘要</summary><pre id="diagnostic-text"></pre><button class="btn" id="copy-diagnostic">复制诊断摘要</button><span id="copy-result" role="status"></span><p>仅复制已预览的摘要，不会自动上传。</p></details></details>'+
+  '<div id="source-classification-notice" class="source-notice" style="display:none">部分历史会话无法识别来源，Code 分类可能不完整。</div>'+
   '<div id="cards" class="cg"></div>'+
   '<div id="media-section" style="display:none"></div>'+
   '<div class="main-layout"><div class="main-left">'+
@@ -308,11 +310,25 @@ async function pollStatus() {
 
 function refresh() { load(true); }
 
+function renderSourceNotice() {
+  var el = $("source-classification-notice");
+  if (!el || !D) return;
+  var sc = D.sourceClassification;
+  var status = typeof sc === "string" ? sc : sc?.status;
+  if (status === "complete") {
+    el.style.display = "none";
+  } else {
+    el.style.display = "block";
+    el.textContent = "部分历史会话无法识别来源，Code 分类可能不完整。";
+  }
+}
+
 function render() {
   if (!D) return;
   updateFilterOpts();
   renderHdrQuota();
   renderStatus();
+  renderSourceNotice();
   // 汇率标注（双币显示时展示换算依据）
   var fxEl=$("fx");
   if(fxEl){
@@ -484,9 +500,11 @@ function renderTrend() {
 
   const desk = data.map(d => d.desktop||0);
   const chan = data.map(d => d.channel||0);
+  const code = data.map(d => d.code||0);
   tc = new Chart($("tc"),{type:"bar",data:{labels,datasets:[
     {label:"聊天",data:desk,backgroundColor:cc.chat,borderRadius:6,borderSkipped:false,barPercentage:0.65,categoryPercentage:0.75},
-    {label:"频道",data:chan,backgroundColor:cc.channel,borderRadius:6,borderSkipped:false,barPercentage:0.65,categoryPercentage:0.75}
+    {label:"频道",data:chan,backgroundColor:cc.channel,borderRadius:6,borderSkipped:false,barPercentage:0.65,categoryPercentage:0.75},
+    {label:"Code",data:code,backgroundColor:cc.code,borderRadius:6,borderSkipped:false,barPercentage:0.65,categoryPercentage:0.75}
   ]},options:{responsive:true,maintainAspectRatio:false,color:cc.text,plugins:{legend:{position:"top",align:"start",labels:{color:cc.text,boxWidth:8,boxHeight:8,font:{size:12,weight:'500'},padding:16,usePointStyle:true,pointStyle:"circle"}},tooltip:{backgroundColor:"rgba(24,24,27,0.92)",titleFont:{size:12,weight:'600'},bodyFont:{size:12},padding:10,cornerRadius:8,boxPadding:4,usePointStyle:true}},scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:12}}},y:{stacked:true,grid:{color:cc.grid},ticks:{callback:function(v){return fmtAxis(v)},font:{size:12}}}}}});
 }
 
@@ -670,6 +688,7 @@ initFilterDropdowns({
       var tx = $("stype")?.querySelector(".cs-txt");
       if (tx) {
         if (item.value === "") tx.textContent = "类型";
+        else if (item.value === "code") tx.textContent = "Code";
         else tx.textContent = item.value === "desktop" ? "聊天" : "频道";
       }
       load();

@@ -194,7 +194,7 @@ export function createAgentAnalytics({ container, getData = () => null }) {
       const displayName =
         flowDim === "agent"
           ? rootData?.agentNames?.[l.id] || l.id
-          : { desktop: "对话", sub: "子代理", bridge: "频道", background: "后台", ledger: "账本" }[l.id] || l.id;
+          : { desktop: "对话", sub: "子代理", bridge: "频道", background: "后台", ledger: "账本", code: "Code" }[l.id] || l.id;
       const legItem = document.createElement("div");
       legItem.className = "legend-item";
       legItem.innerHTML = `<span class="legend-dot" style="background:${l.color}"></span><span class="legend-text">${escapeHtml(displayName)}: ${compact(layerTotals.get(l.id))}</span>`;
