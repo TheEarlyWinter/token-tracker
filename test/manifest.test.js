@@ -21,10 +21,13 @@ test("Manifest V2 合规性与权限最小化校验", () => {
   assert.equal(manifest.minAppVersion, "0.1050.9", "输入状态位需要宿主 0.1050.9 或更新版本");
   assert.equal(manifest.entry, "index.js", "entry 必须为 index.js");
 
-  // 必须声明且仅声明最小必要权限（含受管子进程执行）
+  // 必须声明且仅声明最小必要权限（含受管子进程执行与账本直读）
   const expectedCaps = [
     "app/usage.read",
     "app/runtime.execute",
+    // 直读宿主官方账本需要本机文件访问：宿主投影过的 usage:list 会丢掉
+    // attribution.childAgentId / source.actor，子代理用量就无法归到真正的执行者。
+    "app/runtime.local-machine",
     "app/runtime.network",
     "app/input.status",
     "app/ui.clipboard-write",

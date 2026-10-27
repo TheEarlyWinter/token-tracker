@@ -654,21 +654,24 @@ test("ui/theme.css and ui/base.css define Code styling and theme aliases", () =>
   assert.match(baseCss, /\.source-notice/);
 });
 
-// ── 8. 版本与静态入口一致性 6.9.1 ──
-test("Version manifests, entries and static links are unified to 6.9.1", () => {
+// ── 8. 版本与静态入口一致性 6.9.5 ──
+test("Version manifests, entries and static links are unified to 6.9.5", () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(rootDir, "manifest.json"), "utf-8"));
   const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, "package.json"), "utf-8"));
   const indexHtml = fs.readFileSync(path.join(rootDir, "ui/index.html"), "utf-8");
-  const v691HtmlPath = path.join(rootDir, "ui/dashboard-v6.9.1.html");
+  const v695HtmlPath = path.join(rootDir, "ui/dashboard-v6.9.5.html");
   const fnPanelHtml = fs.readFileSync(path.join(rootDir, "ui/function-panel.html"), "utf-8");
 
-  assert.equal(manifest.version, "6.9.1", "manifest.json 版本必须为 6.9.1");
-  assert.equal(pkg.version, "6.9.1", "package.json 版本必须为 6.9.1");
-  assert.equal(manifest.contributes.cards[0].route, "/dashboard-v6.9.1.html", "主卡入口必须指向 dashboard-v6.9.1.html");
+  assert.equal(manifest.version, "6.9.5", "manifest.json 版本必须为 6.9.5");
+  assert.equal(pkg.version, "6.9.5", "package.json 版本必须为 6.9.5");
+  assert.equal(manifest.contributes.cards[0].route, "/dashboard-v6.9.5.html", "主卡入口必须指向 dashboard-v6.9.5.html");
 
-  assert.ok(fs.existsSync(v691HtmlPath), "ui/dashboard-v6.9.1.html 必须存在");
-  const v691Html = fs.readFileSync(v691HtmlPath, "utf-8");
-  assert.equal(v691Html, indexHtml, "dashboard-v6.9.1.html 内容必须与 ui/index.html 严格一致");
-  assert.match(indexHtml, /data-ui-version="6\.9\.1"/, "ui/index.html 必须标记 6.9.1");
-  assert.match(fnPanelHtml, /v6\.9\.1/, "ui/function-panel.html 必须展示 v6.9.1");
+  assert.ok(fs.existsSync(v695HtmlPath), "ui/dashboard-v6.9.5.html 必须存在");
+  const v695Html = fs.readFileSync(v695HtmlPath, "utf-8");
+  assert.equal(v695Html, indexHtml, "dashboard-v6.9.5.html 内容必须与 ui/index.html 严格一致");
+  assert.match(indexHtml, /data-ui-version="6\.9\.5"/, "ui/index.html 必须标记 6.9.5");
+  assert.match(fnPanelHtml, /v6\.9\.5/, "ui/function-panel.html 必须展示 v6.9.5");
+
+  // 历史入口保留，旧版本链接不能断。
+  assert.ok(fs.existsSync(path.join(rootDir, "ui/dashboard-v6.9.2.html")), "ui/dashboard-v6.9.2.html 必须保留");
 });

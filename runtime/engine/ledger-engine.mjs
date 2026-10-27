@@ -4,6 +4,8 @@ import { openArchiveStore } from "./services/archive-store.js";
 import { createJsonJournalStore } from "./services/json-journal-store.js";
 import { openTurnsStore } from "./services/turns-store.js";
 import { openSessionSourceStore } from "./services/session-sources.js";
+import { loadLedger } from "./services/ledger-source.js";
+import { loadAgentNames } from "./services/agent-names.js";
 import { normalizeEntryForArchive } from "../../lib/ledger-normalization.mjs";
 export { normalizeEntryForArchive } from "../../lib/ledger-normalization.mjs";
 
@@ -16,8 +18,12 @@ const MAX_SOURCE_ENTRIES = 256;
 const TURNS_INDEX_KEY = "bucket-v1";
 const MAX_PENDING_SOURCES = 256;
 const MAX_NAMESPACE_LENGTH = 64;
-const CACHE_VERSION = 20;
+const CACHE_VERSION = 21;
 const MAX_LEDGER_LIMIT = 20000;
+// 子代理记录如果拿不到执行者身份，单独归集，不静默计入委托方。
+// 宿主 `usage:list` 的投影不含 attribution.childAgentId / source.actor，
+// 所以新记录只能靠 scripts/backfill-actor-from-ledger.mjs 从官方账本补写。
+const UNKNOWN_ACTOR = "sub:unknown";
 
 const appTimeZone = process.env.TOKEN_TRACKER_FORCE_TZ || "Asia/Shanghai";
 const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: appTimeZone });
@@ -57,6 +63,11 @@ function addRecordToBucket(bucket, record, day, hour) {
   const provider = record.provider || "";
   const model = record.model || "unknown";
   const type = record.type || "desktop";
+  const baseType = record.baseType || type;
+  const ownerId = record.agentId || "unknown";
+  // 执行者：子代理请求归到真正跑它的 Agent；本体请求执行者就是自己。
+  const actorId = baseType === "sub" ? (record.actorAgentId || UNKNOWN_ACTOR) : ownerId;
+  const parentId = baseType === "sub" ? (record.parentAgentId || ownerId) : null;
   const ts = record.startedAt || record.endedAt || "";
   const input = record.inputTokens || 0;
   const inputUncached = record.inputUncachedTokens ?? input;
@@ -116,10 +127,12 @@ function addRecordToBucket(bucket, record, day, hour) {
     bucket.dailyBreakdown[day] = {
       ...emptyTypeTotals(),
       input: 0, inputUncached: 0, output: 0, cacheRead: 0, cacheWrite: 0, assistantCount: 0,
-      models: {}, providerTotals: {},
+      models: {}, providerTotals: {}, baseTotals: {}, actors: {},
     };
   }
   const daily = bucket.dailyBreakdown[day];
+  daily.baseTotals[baseType] = (daily.baseTotals[baseType] || 0) + total;
+  accumulateActor(daily, { actorId, parentId, baseType, model, provider, total, input, output, cacheRead, cacheWrite });
   daily.totalTokens += total;
   if (daily[type] !== undefined) daily[type] += total;
   else daily[type] = total;
@@ -155,10 +168,11 @@ function addRecordToBucket(bucket, record, day, hour) {
   if (!bucket.hourlyBreakdown[day][hour]) {
     bucket.hourlyBreakdown[day][hour] = {
       ...emptyTypeTotals(),
-      cacheRead: 0, cacheWrite: 0, assistantCount: 0, models: {}, providerTotals: {},
+      cacheRead: 0, cacheWrite: 0, assistantCount: 0, models: {}, providerTotals: {}, actors: {},
     };
   }
   const hourly = bucket.hourlyBreakdown[day][hour];
+  accumulateActor(hourly, { actorId, parentId, baseType, model, provider, total, input, output, cacheRead, cacheWrite });
   hourly.totalTokens += total;
   if (hourly[type] !== undefined) hourly[type] += total;
   else hourly[type] = total;
@@ -186,6 +200,72 @@ function addRecordToBucket(bucket, record, day, hour) {
     stats.assistantCount++;
     if (stats[type] !== undefined) stats[type] += total;
   }
+}
+
+function accumulateActor(container, { actorId, parentId, baseType, model, provider, total, input, output, cacheRead, cacheWrite }) {
+  if (!container.actors) container.actors = {};
+  if (!container.actors[actorId]) {
+    container.actors[actorId] = {
+      totalTokens: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0,
+      assistantCount: 0, delegatedTokens: 0, byParent: {}, models: {},
+    };
+  }
+  const actor = container.actors[actorId];
+  actor.totalTokens += total;
+  actor.input += input;
+  actor.output += output;
+  actor.cacheRead += cacheRead;
+  actor.cacheWrite += cacheWrite;
+  actor.assistantCount++;
+  if (baseType === "sub") {
+    actor.delegatedTokens += total;
+    actor.byParent[parentId] = (actor.byParent[parentId] || 0) + total;
+  }
+  if (!actor.models[model]) {
+    actor.models[model] = { provider, totalTokens: 0, subTokens: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, assistantCount: 0 };
+  }
+  const actorModel = actor.models[model];
+  actorModel.totalTokens += total;
+  if (baseType === "sub") actorModel.subTokens += total;
+  actorModel.input += input;
+  actorModel.output += output;
+  actorModel.cacheRead += cacheRead;
+  actorModel.cacheWrite += cacheWrite;
+  actorModel.assistantCount++;
+}
+
+// 单条会话记录在 RPC 页里的预算（留出信封余量，宿主单条上限 1MB）。
+const RECORD_BUDGET = 900 * 1024;
+
+// 只为传输裁剪一条超大记录的 conversations：留最近的能装下的部分，标记截断与总数。
+// 不改磁盘缓存、不删明细索引：详细视图优先走 SQLite turns 表，这里只是兵底副本。
+function trimRecordForTransport(record, key, budget) {
+  if (!record || !Array.isArray(record.conversations) || !record.conversations.length) return null;
+  const total = record.conversations.length;
+  const measure = (keep) => Buffer.byteLength(JSON.stringify({
+    [key]: {
+      ...record,
+      conversations: keep >= total ? record.conversations : record.conversations.slice(total - keep),
+      conversationsTruncated: keep < total,
+      conversationsTotal: total,
+    },
+  }));
+  if (measure(total) <= budget) return null;
+  let low = 0;
+  let high = total;
+  let best = null;
+  while (low <= high) {
+    const keep = Math.floor((low + high) / 2);
+    if (measure(keep) <= budget) { best = keep; low = keep + 1; }
+    else high = keep - 1;
+  }
+  if (best === null) return null;
+  return {
+    ...record,
+    conversations: best >= total ? record.conversations : record.conversations.slice(total - best),
+    conversationsTruncated: best < total,
+    conversationsTotal: total,
+  };
 }
 
 function aggregateBucket(key, records) {
@@ -252,9 +332,12 @@ function computePrediction(cache, dailyGlobal) {
 }
 
 export class LedgerEngine {
-  constructor({ dataDir, log = null } = {}) {
+  constructor({ dataDir, homeDir = null, log = null } = {}) {
     if (typeof dataDir !== "string" || !path.isAbsolute(dataDir)) throw new TypeError("dataDir must be an absolute path");
     this.dataDir = dataDir;
+    // 官方账本所在目录：由宿主进程传入（从 dataDir 推导），null 表示不做直读。
+    // 不在引擎里猜路径：猜错就会读到另一个 home 的账本，而且是静默的。
+    this.homeDir = typeof homeDir === "string" && path.isAbsolute(homeDir) ? homeDir : null;
     this.log = asLog(log);
     this.cachePath = path.join(dataDir, CACHE_FILE);
     this.archiveStore = openArchiveStore(path.join(dataDir, ARCHIVE_FILE), this.log);
@@ -560,6 +643,31 @@ export class LedgerEngine {
     return { sessionIds, known, cooling };
   }
 
+  // 归档里只有 baseType=sub、没有执行者身份时尝试补写。目前宿主 `usage:list` 的投影
+  // 不包含 childAgentId / source.actor，所以线上不会命中；保留此路以应对宿主补字段，
+  // 也可作为外部脚本（scripts/backfill-actor-from-ledger.mjs）写入后的自愈校验。
+  actorPatchOf(raw) {
+    const actor = raw?.source?.actor?.agentId || raw?.attribution?.childAgentId || null;
+    const parent = raw?.attribution?.agentId || null;
+    const cleanActor = typeof actor === "string" && actor.trim() ? actor.trim() : null;
+    const cleanParent = typeof parent === "string" && parent.trim() ? parent.trim() : null;
+    if (!cleanActor && !cleanParent) return null;
+    return { actorAgentId: cleanActor, parentAgentId: cleanParent };
+  }
+
+  backfillActor(rid, record, patch) {
+    if (!record || record.baseType !== "sub" || !patch) return false;
+    if (record.actorAgentId && record.parentAgentId) return false;
+    let changed = false;
+    if (!record.actorAgentId && patch.actorAgentId) { record.actorAgentId = patch.actorAgentId; changed = true; }
+    if (!record.parentAgentId && patch.parentAgentId) { record.parentAgentId = patch.parentAgentId; changed = true; }
+    if (!changed) return false;
+    this.archiveStore.patch(rid, record);
+    const key = this.recordKeys.get(rid);
+    if (key) this.dirtyBuckets.add(key);
+    return true;
+  }
+
   archiveUsage(raw) {
     if (!raw || raw.status !== "ok" || !raw.usage || typeof raw.requestId !== "string" || !raw.requestId) {
       return { accepted: false, reason: "invalid_entry" };
@@ -574,7 +682,45 @@ export class LedgerEngine {
     return { accepted: true, rows: persisted.rows, archiveCount: this.archiveStore.size() };
   }
 
+  // 本机 agents/<id>/config.yaml 里的显示名：补上 agent:list 不列的池成员（hana-artisan 等）。
+  agentNamesFromDisk() {
+    if (!this.homeDir) return {};
+    try {
+      return loadAgentNames(this.homeDir, this.log);
+    } catch {
+      return {};
+    }
+  }
+
+  // 直读官方账本是否可用：只探一下（命中指纹时就是一次 stat），不返回条目本身。
+  ledgerProbe() {
+    if (!this.homeDir) return { available: false, mode: "none", path: null, count: 0, error: "NO_HANA_HOME" };
+    try {
+      const loaded = loadLedger(this.homeDir, this.log);
+      return {
+        available: loaded.sourceMode !== "none" && loaded.entries.length > 0,
+        mode: loaded.sourceMode,
+        path: loaded.sourcePath,
+        count: loaded.entries.length,
+        error: loaded.error || null,
+      };
+    } catch (error) {
+      return { available: false, mode: "none", path: null, count: 0, error: error?.code || error?.message || "UNKNOWN" };
+    }
+  }
+
   async scan(entries, options = {}) {
+    // local-machine 直读模式：条目由引擎自己从官方账本读，宿主接口不再参与。
+    let ledgerSource = null;
+    if (options.localLedger === true) {
+      if (!this.homeDir) throw Object.assign(new Error("官方账本不可读"), { code: "LEDGER_UNAVAILABLE" });
+      const loaded = loadLedger(this.homeDir, this.log);
+      ledgerSource = { mode: loaded.sourceMode, path: loaded.sourcePath, count: loaded.entries.length, error: loaded.error || null };
+      if (!loaded.entries.length) {
+        throw Object.assign(new Error("官方账本不可读"), { code: "LEDGER_UNAVAILABLE" });
+      }
+      entries = loaded.entries;
+    }
     if (!Array.isArray(entries)) entries = [];
     // 屏障必须先落盘：失败则本轮不修改任何持久数据。
     this.beginAggregateWrite();
@@ -593,11 +739,23 @@ export class LedgerEngine {
     if (options.agentNames && Object.keys(options.agentNames).length) {
       cache.agentNames = { ...(options.agentNames || {}), ...(cache.agentNames || {}) };
     }
+    // 子代理池成员 id：它们只有本机名字，不拥有会话桶，不应进 Agent 筛选下拉。
+    if (Array.isArray(options.poolAgentIds)) {
+      cache.poolAgentIds = options.poolAgentIds
+        .filter((id) => typeof id === "string" && id && id.length <= 256)
+        .slice(0, 500);
+    }
 
     let newArchivedCount = 0;
+    let actorBackfilled = 0;
     for (const raw of entries) {
       if (!raw || typeof raw.requestId !== "string" || !raw.requestId || raw.status !== "ok" || !raw.usage) continue;
-      if (this.archiveStore.entries[raw.requestId]) continue;
+      const existing = this.archiveStore.entries[raw.requestId];
+      if (existing) {
+        // 先到先得：归档已收下这条，但旧版本可能没写执行者身份，窗口内会补。
+        if (this.backfillActor(raw.requestId, existing, this.actorPatchOf(raw))) actorBackfilled++;
+        continue;
+      }
       const record = normalizeEntryForArchive(raw, { namespace: this.sourceStore.get(raw.attribution?.sessionId) });
       this.archiveStore.entries[raw.requestId] = record;
       this.dirtyBuckets.add(this.indexRecord(record));
@@ -655,6 +813,8 @@ export class LedgerEngine {
       revision: this.revision,
       lastScan: cache.lastScan,
       newArchivedCount,
+      actorBackfilled,
+      ledgerSource,
       archiveCount: this.archiveStore.size(),
       archiveRowsWritten: archiveWrite.rows,
       cacheWrites: persistence.rows,
@@ -683,12 +843,19 @@ export class LedgerEngine {
     while (index < keys.length) {
       const key = keys[index];
       const record = this.data.sessions[key];
-      const rowBytes = Buffer.byteLength(JSON.stringify({ [key]: record }));
+      let row = record;
+      let rowBytes = Buffer.byteLength(JSON.stringify({ [key]: record }));
       if (Object.keys(sessions).length && bytes + rowBytes > maxBytes) break;
-      if (!Object.keys(sessions).length && bytes + rowBytes > 900 * 1024) {
-        throw Object.assign(new Error("cache record exceeds RPC page limit"), { code: "RECORD_TOO_LARGE" });
+      // 单条记录超预算时只裁传输副本：逐条 conversations 是历史明细的兵底数据，
+      // 磁盘缓存与明细索引都保留全量，这里仅把最近能装下的部分发给前端并标记截断。
+      if (!Object.keys(sessions).length && rowBytes > RECORD_BUDGET) {
+        row = trimRecordForTransport(record, key, RECORD_BUDGET);
+        if (row) rowBytes = Buffer.byteLength(JSON.stringify({ [key]: row }));
+        if (!row || rowBytes > RECORD_BUDGET) {
+          throw Object.assign(new Error("cache record exceeds RPC page limit"), { code: "RECORD_TOO_LARGE" });
+        }
       }
-      sessions[key] = record;
+      sessions[key] = row;
       bytes += rowBytes;
       index++;
       if (bytes >= maxBytes) break;

@@ -16,7 +16,7 @@ export function createFakeRuntime({ onStart = () => {} } = {}) {
           throw Object.assign(new Error("Managed services require loopback or external networking"), { code: "RUNTIME_INVALID_SERVICE_NETWORK" });
         }
         const config = JSON.parse(fs.readFileSync(input.args[0], "utf8"));
-        const engine = createLedgerEngine({ dataDir: config.dataDir, log: { info() {}, warn() {}, error() {} } });
+        const engine = createLedgerEngine({ dataDir: config.dataDir, homeDir: config.homeDir ?? null, log: { info() {}, warn() {}, error() {} } });
         const dispatch = createRpcDispatcher({ getEngine: () => engine });
         const runtimeId = `fake-runtime-${stats.starts}`;
         runtimes.set(runtimeId, { engine, dispatch, secret: config.secret });

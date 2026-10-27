@@ -32,6 +32,27 @@ function modelsFor(bucket, { model, provider } = {}) {
   return result;
 }
 
+// 执行者维度：谁真正跑了这批 token。旧缓存没有 actors 时返回 null，由调用方回退到委托方。
+function actorsFor(bucket, { model, provider } = {}) {
+  if (!bucket || !bucket.actors) return null;
+  const models = Array.isArray(model) ? model : model ? [model] : [];
+  const providers = Array.isArray(provider) ? provider : provider ? [provider] : [];
+  const result = new Map();
+  for (const [id, actor] of Object.entries(bucket.actors)) {
+    let totalTokens = 0, delegatedTokens = 0, count = 0;
+    for (const [modelId, stats] of Object.entries(actor.models || {})) {
+      if (models.length && !models.includes(modelId)) continue;
+      if (providers.length && !providers.includes(stats.provider || "")) continue;
+      totalTokens += value(stats.totalTokens);
+      delegatedTokens += value(stats.subTokens);
+      count += value(stats.assistantCount);
+    }
+    if (!totalTokens) continue;
+    result.set(id, { totalTokens, delegatedTokens, count });
+  }
+  return result;
+}
+
 function quantile(values, q) {
   if (!values.length) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -131,15 +152,36 @@ export function buildVisualAnalytics(sessions, dateFilter, filters = {}, rows = 
       }
 
       if (canSplit) {
-        day.agents[session.agent] = (day.agents[session.agent] || 0) + total;
+        const acts = actorsFor(bucket, filters);
+        if (acts) {
+          for (const [id, a] of acts) {
+            day.agents[id] = (day.agents[id] || 0) + a.totalTokens;
+            const row = agents.get(id) || { id, totalTokens: 0, selfTokens: 0, delegatedTokens: 0, days: {} };
+            row.totalTokens += a.totalTokens;
+            row.delegatedTokens += a.delegatedTokens;
+            row.selfTokens += a.totalTokens - a.delegatedTokens;
+            row.days[date] = (row.days[date] || 0) + a.totalTokens;
+            agents.set(id, row);
+          }
+        } else {
+          day.agents[session.agent] = (day.agents[session.agent] || 0) + total;
+          const row = agents.get(session.agent) || { id: session.agent, totalTokens: 0, selfTokens: 0, delegatedTokens: 0, days: {} };
+          const delegated = session.type === "sub" ? total : 0;
+          row.totalTokens += total;
+          row.delegatedTokens += delegated;
+          row.selfTokens += total - delegated;
+          row.days[date] = (row.days[date] || 0) + total;
+          agents.set(session.agent, row);
+        }
+      } else {
+        const row = agents.get(session.agent) || { id: session.agent, totalTokens: 0, selfTokens: 0, delegatedTokens: 0, days: {} };
+        const delegated = session.type === "sub" ? total : 0;
+        row.totalTokens += total;
+        row.delegatedTokens += delegated;
+        row.selfTokens += total - delegated;
+        row.days[date] = (row.days[date] || 0) + total;
+        agents.set(session.agent, row);
       }
-
-      if (!agents.has(session.agent)) {
-        agents.set(session.agent, { id: session.agent, totalTokens: 0, days: {} });
-      }
-      const agent = agents.get(session.agent);
-      agent.totalTokens += total;
-      agent.days[date] = (agent.days[date] || 0) + total;
     }
 
     if (active) sessionCount++;
@@ -176,7 +218,12 @@ export function buildVisualAnalytics(sessions, dateFilter, filters = {}, rows = 
         }
 
         if (canSplit) {
-          cell.agents[session.agent] = (cell.agents[session.agent] || 0) + total;
+          const acts = actorsFor(bucket, filters);
+          if (acts) {
+            for (const [id, a] of acts) cell.agents[id] = (cell.agents[id] || 0) + a.totalTokens;
+          } else {
+            cell.agents[session.agent] = (cell.agents[session.agent] || 0) + total;
+          }
         }
       }
     }

@@ -62,7 +62,9 @@ test("Code totals are exposed on summary, agents, daily, daily30 and hourly with
   const agentA = data.agents.find((a) => a.id === "agent-a");
   const agentB = data.agents.find((a) => a.id === "agent-b");
   assert.equal(agentA.codeTotal, 150);
-  assert.equal(agentA.subTotal, 30);
+  // 委托方口径：Code 命名空间下的子代理也要计入。旧实现只累加 type=sub 的桶，
+  // 这里 50 token 的 code-sub 被漏掉，所以这里正确值是 80。
+  assert.equal(agentA.subTotal, 80);
   assert.equal(agentB.codeTotal, 5);
 
   const day = data.daily.find((d) => d.date === today);

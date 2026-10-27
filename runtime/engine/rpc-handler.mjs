@@ -75,18 +75,23 @@ export function createRpcDispatcher({ getEngine, getInitError = () => null } = {
       pending = {
         scanId: payload.scanId,
         entries: [],
+        localLedger: payload.localLedger === true,
         force: payload.force === true,
         agentNames,
         coverageLimitReached: payload.coverageLimitReached === true,
         usageQueryError: typeof payload.usageQueryError === "string" ? payload.usageQueryError.slice(0, 500) : null,
         sessionNamespaces: sanitizeSessionNamespaces(payload.sessionNamespaces),
         sourceResolution: sanitizeSourceResolution(payload.sourceResolution),
+        poolAgentIds: Array.isArray(payload.poolAgentIds)
+          ? payload.poolAgentIds.filter((id) => typeof id === "string" && id && id.length <= 256).slice(0, 500)
+          : null,
       };
       return { accepted: true, scanId: pending.scanId };
     }
 
     if (method === "scan.append") {
       if (!pending || payload.scanId !== pending.scanId || !Array.isArray(payload.entries)) throw Object.assign(new Error("invalid scan batch"), { code: "INVALID_PAYLOAD" });
+      if (pending.localLedger) throw Object.assign(new Error("local ledger scan takes no pushed entries"), { code: "INVALID_PAYLOAD" });
       if (pending.entries.length + payload.entries.length > MAX_SCAN_ENTRIES) throw Object.assign(new Error("too many ledger entries"), { code: "INVALID_PAYLOAD" });
       for (const entry of payload.entries) if (isObject(entry)) pending.entries.push(entry);
       return { accepted: true, received: pending.entries.length };
@@ -110,6 +115,14 @@ export function createRpcDispatcher({ getEngine, getInitError = () => null } = {
     if (method === "scan.status") {
       if (!job || payload.jobId !== job.jobId) throw Object.assign(new Error("unknown scan job"), { code: "NOT_FOUND" });
       return { ...job };
+    }
+
+    if (method === "ledger.probe") {
+      return engine.ledgerProbe();
+    }
+
+    if (method === "agents.names") {
+      return engine.agentNamesFromDisk();
     }
 
     if (method === "archive.append") {

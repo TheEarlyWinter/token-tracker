@@ -280,13 +280,15 @@ export default function (app, ctx) {
       const activeAgentIds = new Set();
       try {
         const ar = typeof ctx.agents?.list === "function"
-          ? await ctx.agents.list({ scope: "all" })
-          : await ctx.bus.request("agent:list", { scope: "all" });
+          ? await ctx.agents.list({ scope: "all", lifecycle: "all" })
+          : await ctx.bus.request("agent:list", { scope: "all", lifecycle: "all" });
         if (ar?.agents && Array.isArray(ar.agents)) {
           const names = {};
           for (const a of ar.agents) {
             names[a.id] = a.name || a.id;
-            activeAgentIds.add(a.id);
+            // 名册含退役 Agent（lifecycle:all）：名字要拿到但状态另算，
+            // 所以只把 active 的计入“当前在册”。
+            if (a.state !== "retired") activeAgentIds.add(a.id);
           }
           result.agentNames = { ...result.agentNames, ...names };
         }
@@ -297,6 +299,11 @@ export default function (app, ctx) {
         if (activeAgentIds.size > 0 && !activeAgentIds.has(a.id)) {
           a.deleted = true;
         }
+      }
+      // 执行者清单不标「历史 Agent」：agent:list 不包含子代理池成员（hana-artisan、luna…），
+      // 不在名册≠已退役。名单里没有就只显示 id，不额外编一个状态。
+      for (const a of result.actors || []) {
+        a.deleted = false;
       }
 
       // 获取当前活跃 Providers (通过官方公开 bus: model:list)
@@ -980,12 +987,29 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
     return result;
   }
 
+  // 执行者维度也要吃同一套模型/供应商筛选：按该执行者的模型分布重算，不拿全量代替筛选结果。
+  const actorFiltersActive = !!(filterModel || filterProvider);
+  function scopedActorStats(actor) {
+    if (!actorFiltersActive) return actor;
+    const out = { totalTokens: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, assistantCount: 0, delegatedTokens: 0 };
+    for (const [modelId, stats] of Object.entries(actor.models || {})) {
+      if (filterModel && modelId !== filterModel) continue;
+      if (filterProvider && (stats.provider || "") !== filterProvider) continue;
+      for (const key of ["totalTokens", "input", "output", "cacheRead", "cacheWrite", "assistantCount"]) {
+        out[key] += stats[key] || 0;
+      }
+      out.delegatedTokens += stats.subTokens || 0;
+    }
+    return out;
+  }
+
   const sessionPool = sessions;
   if (filterModel) {
     sessions = sessions.filter((s) => s.models?.[filterModel]);
   }
 
   const agentMap = {};
+  const actorMap = Object.create(null);
   const modelMap = {};
   const dailyMap = {};
   const providerMap = Object.create(null);
@@ -1015,7 +1039,7 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
       if (!agentMap[a]) {
         agentMap[a] = {
           input: 0, output: 0, totalTokens: 0, cacheRead: 0, assistantCount: 0,
-          desktopTotal: 0, channelTotal: 0, bridgeTotal: 0, backgroundTotal: 0, subTotal: 0, ledgerTotal: 0, codeTotal: 0, models: {},
+          desktopTotal: 0, channelTotal: 0, bridgeTotal: 0, backgroundTotal: 0, subTotal: 0, ledgerTotal: 0, codeTotal: 0, models: {}, delegatedBy: {},
         };
       }
       agentMap[a].input += di; agentMap[a].output += dout; agentMap[a].totalTokens += dtot; agentMap[a].cacheRead += dcr;
@@ -1023,9 +1047,10 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
       if (s.type === "desktop") agentMap[a].desktopTotal += dtot;
       else if (s.type === "bridge") agentMap[a].bridgeTotal += dtot;
       else if (s.type === "background") agentMap[a].backgroundTotal += dtot;
-      else if (s.type === "sub") agentMap[a].subTotal += dtot;
+      // subTotal 改由执行者维度推导（含 Code 里的子代理），此处不再重复累加。
       else if (s.type === "ledger") agentMap[a].ledgerTotal += dtot;
       else if (s.type === "code") agentMap[a].codeTotal += dtot;
+      else if (s.type === "sub") { /* 落在 delegated 统计里 */ }
       else agentMap[a].channelTotal += dtot;
 
       if (!dailyMap[day]) {
@@ -1050,6 +1075,60 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
       else if (s.type === "ledger") sums.totalLedger += dtot;
       else if (s.type === "code") sums.totalCode += dtot;
       else sums.totalChannel += dtot;
+
+      // 执行者归因：谁真正跑了这些 token。子代理请求算在执行它的 Agent 名下，
+      // 委托方只在 delegatedBy 里留一笔“派出去多少”，不再把别人的用量算成自己的。
+      const dayActors = d.actors;
+      if (dayActors) {
+        let delegatedOut = 0;
+        for (const [actorId, actor] of Object.entries(dayActors)) {
+          const scoped = scopedActorStats(actor);
+          const actorTotal = scoped.totalTokens || 0;
+          if (!actorTotal) continue;
+          let row = actorMap[actorId];
+          if (!row) {
+            row = actorMap[actorId] = {
+              id: actorId, input: 0, output: 0, totalTokens: 0, cacheRead: 0, cacheWrite: 0,
+              assistantCount: 0, selfTokens: 0, delegatedTokens: 0, parents: {}, models: {},
+            };
+          }
+          const delegated = Math.min(scoped.delegatedTokens || 0, actorTotal);
+          row.input += scoped.input || 0;
+          row.output += scoped.output || 0;
+          row.totalTokens += actorTotal;
+          row.cacheRead += scoped.cacheRead || 0;
+          row.cacheWrite += scoped.cacheWrite || 0;
+          row.assistantCount += scoped.assistantCount || 0;
+          row.delegatedTokens += delegated;
+          row.selfTokens += actorTotal - delegated;
+          if (!actorFiltersActive) {
+            for (const [parentId, tokens] of Object.entries(actor.byParent || {})) {
+              row.parents[parentId] = (row.parents[parentId] || 0) + (tokens || 0);
+            }
+          }
+          for (const [modelId, modelStats] of Object.entries(actor.models || {})) {
+            if (filterModel && modelId !== filterModel) continue;
+            if (filterProvider && (modelStats.provider || "") !== filterProvider) continue;
+            row.models[modelId] = (row.models[modelId] || 0) + (modelStats.totalTokens || 0);
+          }
+          delegatedOut += delegated;
+        }
+        // 委托方口径：这一天派出去的子代理用量（含执行者未标注的），与执行者口径互不干扰。
+        agentMap[a].subTotal += delegatedOut;
+      } else {
+        // 旧缓存兜底：没有执行者维度时，子代理用量仍归委托方，但至少标成 delegated。
+        let row = actorMap[a];
+        if (!row) {
+          row = actorMap[a] = {
+            id: a, input: 0, output: 0, totalTokens: 0, cacheRead: 0, cacheWrite: 0,
+            assistantCount: 0, selfTokens: 0, delegatedTokens: 0, parents: {}, models: {},
+          };
+        }
+        const delegated = s.type === "sub" ? dtot : 0;
+        row.input += di; row.output += dout; row.totalTokens += dtot; row.cacheRead += dcr;
+        row.assistantCount += dasst; row.delegatedTokens += delegated; row.selfTokens += dtot - delegated;
+        agentMap[a].subTotal += delegated;
+      }
 
       for (const [key, stats] of Object.entries(d.providerTotals || {})) {
         const slash = key.indexOf('/');
@@ -1081,16 +1160,33 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
     ...d,
   })).sort((a, b) => b.totalTokens - a.totalTokens);
 
+  // 执行者清单：同一批 token 只在这里算一次，按实际跑它的 Agent 排。
+  const actors = Object.values(actorMap)
+    .map((row) => ({ ...row }))
+    .sort((a, b) => b.totalTokens - a.totalTokens);
+  const agentsById = new Map(agents.map((a) => [a.id, a]));
+  for (const row of actors) {
+    // 委托方的 delegatedBy：从子代理的 parents 反推，两个视图不会互相矛盾。
+    for (const [parentId, tokens] of Object.entries(row.parents || {})) {
+      const parent = agentsById.get(parentId);
+      if (!parent) continue;
+      parent.delegatedBy[row.id] = (parent.delegatedBy[row.id] || 0) + tokens;
+    }
+  }
+
   // 排序 Models
   const models = Object.entries(modelMap).map(([id, d]) => ({
     id,
     ...d,
   })).sort((a, b) => b.totalTokens - a.totalTokens);
 
-  // 侧边栏 Agent 筛选选项：只保留当前已注册的 Agent，不展示历史已删除/已停用 Agent
+  // 侧边栏 Agent 筛选选项：只保留当前已注册的 Agent，不展示子代理池成员。
+  // 池成员（hana-artisan / luna…）不拥有会话桶，放进筛选只会得到一个永远为空的结果。
   const configuredAgentNames = cache.agentNames || {};
   const configuredAgentIds = Object.keys(configuredAgentNames);
+  const poolIds = new Set(Array.isArray(cache.poolAgentIds) ? cache.poolAgentIds : []);
   const activeAgentList = (configuredAgentIds.length > 0 ? configuredAgentIds : Object.keys(agentMap))
+    .filter((id) => !poolIds.has(id))
     .map((id) => ({
       id,
       name: configuredAgentNames[id] || id,
@@ -1201,6 +1297,9 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
       estimatedCost,
     },
     agents,
+    actors,
+    // 子代理池成员 id：名字来自本机配置，UI 把名字和 id 一起标，避免与供应商重名。
+    poolAgentIds: [...poolIds],
     agentOptions,
     models,
     modelOptions,

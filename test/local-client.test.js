@@ -21,15 +21,18 @@ function entry(requestId) {
   };
 }
 
-test("managed service starts once with scoped/external networking and stops cleanly",  async () => {
-  const dir = tempDir();
+test("managed service starts once with local-machine/external networking and stops cleanly",  async () => {
+  // 真实布局 <HanaHome>/app-data/<appId> 才用 local-machine 直读账本。
+  const home = tempDir();
+  const dir = path.join(home, "app-data", "token-tracker");
+  fs.mkdirSync(dir, { recursive: true });
   const fake = createFakeRuntime();
   const client = new LocalClient({ ctx: { dataDir: dir, runtime: fake.api }, dataDir: dir });
   try {
     const ids = await Promise.all([client.start(), client.start(), client.start()]);
     assert.equal(new Set(ids).size, 1);
     assert.equal(fake.stats.starts, 1);
-    assert.equal(fake.stats.lastStartInput.profile, "scoped");
+    assert.equal(fake.stats.lastStartInput.profile, "local-machine");
     assert.equal(fake.stats.lastStartInput.network, "external");
     assert.equal(fake.stats.lastStartInput.entry, "runtime/service.mjs");
     assert.equal((await client.call("status")).ready, true);
@@ -37,6 +40,22 @@ test("managed service starts once with scoped/external networking and stops clea
     await client.dispose();
     assert.equal(fake.stats.stops, 1);
     assert.deepEqual(fs.readdirSync(dir), []);
+  } finally {
+    await client.dispose();
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("a dataDir outside the app-data layout starts sandboxed and reports no direct ledger", async () => {
+  const dir = tempDir();
+  const fake = createFakeRuntime();
+  const client = new LocalClient({ ctx: { dataDir: dir, runtime: fake.api }, dataDir: dir });
+  try {
+    await client.start();
+    // 推不出 Hana home 就不申请本机文件权限：宁可少执行者字段，也不去猜路径。
+    assert.equal(fake.stats.lastStartInput.profile, "scoped");
+    const probe = await client.probeLedger();
+    assert.equal(probe.available, false);
   } finally {
     await client.dispose();
     fs.rmSync(dir, { recursive: true, force: true });

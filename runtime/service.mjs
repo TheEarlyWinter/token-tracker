@@ -9,7 +9,8 @@ if (typeof configFile !== "string" || !path.isAbsolute(configFile)) throw new Er
 const config = JSON.parse(fs.readFileSync(configFile, "utf8").replace(/^\uFEFF/, ""));
 if (!Number.isInteger(config.port) || config.port < 1024 || config.port > 65535 ||
     typeof config.secret !== "string" || !/^[a-f0-9]{64}$/.test(config.secret) ||
-    typeof config.dataDir !== "string" || !path.isAbsolute(config.dataDir)) {
+    typeof config.dataDir !== "string" || !path.isAbsolute(config.dataDir) ||
+    (config.homeDir !== null && config.homeDir !== undefined && (typeof config.homeDir !== "string" || !path.isAbsolute(config.homeDir)))) {
   throw new Error("Invalid runtime configuration");
 }
 try { fs.rmSync(configFile, { force: true }); } catch {}
@@ -32,6 +33,9 @@ setImmediate(() => {
   try {
     engine = createLedgerEngine({
       dataDir: config.dataDir,
+      // null 表示这个环境不允许直读宿主账本（目录布局不明或测试环境），
+      // 此时引擎只接受宿主推过来的 usage:list 条目。
+      homeDir: typeof config.homeDir === "string" ? config.homeDir : null,
       log: {
         info: (...args) => console.log(...args),
         warn: (...args) => console.warn(...args),

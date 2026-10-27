@@ -42,6 +42,7 @@ export function openArchiveStore(jsonPath, log = null) {
   const journalPath = journalPathForArchive(jsonPath);
   const entries = Object.create(null); // rid -> 归档条目
   const written = new Set();           // 已落进日志的 rid
+  const patched = new Set();           // 需要重写已有行的 rid
   let updatedAt = null;
   let persistedUpdatedAt = null;
 
@@ -144,16 +145,33 @@ export function openArchiveStore(jsonPath, log = null) {
   }
 
   // 把内存里还没落盘的条目标追加进日志；返回 { rows, bytes }。
+  // 另有“改写”通道：patch() 重新写入已有 rid 的行（同 rid 后写覆盖，读取侧已支持），
+  // 用于给旧记录补上后加的字段，不丢历史。
   function appendPending() {
     const fresh = [];
     for (const rid of Object.keys(entries)) if (!written.has(rid)) fresh.push({ rid, v: entries[rid] });
-    const lines = fresh.slice();
+    const rewritten = [];
+    for (const rid of patched) {
+      if (!written.has(rid)) continue;
+      const v = entries[rid];
+      if (v != null) rewritten.push({ rid, v });
+    }
+    const lines = rewritten.concat(fresh);
     if (updatedAt && updatedAt !== persistedUpdatedAt) lines.push({ meta: 1, version: ARCHIVE_VERSION, updatedAt });
     if (!lines.length) return { rows: 0, bytes: 0 };
     const bytes = appendJsonLines(journalPath, lines);
     for (const r of fresh) written.add(r.rid);
+    patched.clear();
     persistedUpdatedAt = updatedAt;
-    return { rows: fresh.length, bytes };
+    return { rows: fresh.length + rewritten.length, bytes };
+  }
+
+  // 重写一条已归档记录（字段补全/修正）。只在内存生效，落盘由 appendPending 完成。
+  function patch(rid, v) {
+    if (rid == null || v == null) return false;
+    entries[rid] = v;
+    if (written.has(rid)) patched.add(rid);
+    return true;
   }
 
   return {
@@ -162,6 +180,7 @@ export function openArchiveStore(jsonPath, log = null) {
     get updatedAt() { return updatedAt; },
     set updatedAt(v) { updatedAt = v; },
     appendPending,
+    patch,
     size: () => Object.keys(entries).length,
   };
 }

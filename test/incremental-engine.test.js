@@ -105,3 +105,37 @@ test("live usage event is journaled once and folded into the next ledger scan", 
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("oversized session records are trimmed for transport without touching stored history", async () => {
+  const dir = tempDir();
+  const engine = createLedgerEngine({ dataDir: dir, log: { info() {}, warn() {}, error() {} } });
+  try {
+    // 单个 Agent-日桶塞进足够多请求，让记录超过 RPC 单条预算（约 900KB）。
+    const many = Array.from({ length: 9000 }, (_, i) =>
+      entry(`bulk-${i}`, { startedAt: `2026-10-06T${String(10 + (i % 10)).padStart(2, "0")}:00:00+08:00` })
+    );
+    await engine.scan(many, {});
+
+    const key = "agent-a::desktop::2026-10-06";
+    const stored = engine.getData().sessions[key];
+    assert.equal(stored.conversations.length, 9000, "磁盘缓存保留全量明细");
+
+    const payload = engine.page({ cursor: 0 });
+    const row = payload.sessions[key];
+    assert.ok(row, "超预算记录仍必须能被翻出");
+    assert.equal(row.conversationsTotal, 9000);
+    assert.equal(row.conversationsTruncated, true);
+    assert.ok(row.conversations.length < 9000);
+    assert.ok(row.conversations.length > 0);
+    // 裁剪保留最近的请求，不是从头截断。
+    assert.equal(row.conversations[row.conversations.length - 1].time, stored.conversations[stored.conversations.length - 1].time);
+    assert.ok(Buffer.byteLength(JSON.stringify({ [key]: row })) <= 900 * 1024);
+
+    // 聚合字段不受裁剪影响。
+    assert.equal(row.totalTokens, stored.totalTokens);
+    assert.equal(row.assistantCount, stored.assistantCount);
+  } finally {
+    engine.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

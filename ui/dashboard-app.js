@@ -53,6 +53,36 @@ var D, R = "today", tc, mc, ac, _allAgents = null, _allModels = null, _allProvid
 function $(id) { return document.getElementById(id); }
 function fmt(n) { if(!n||n===0) return "0"; if(n>=1e8) return (n/1e8).toFixed(1)+"亿"; if(n>=1e6) return (n/1e6).toFixed(1)+"M"; if(n>=1e3) return (n/1e3).toFixed(1)+"k"; return n.toLocaleString(); }
 function fmtAxis(n) { if(!n||n===0) return "0"; if(n>=1e8) return (n/1e8).toFixed(1)+"亿"; if(n>=1e6) return (n/1e6).toFixed(1)+"M"; if(n>=1e3) return (n/1e3).toFixed(1)+"k"; return n.toLocaleString(); }
+// ── 执行者（谁真正跑了这些 token）──
+// 子代理请求不再算到委托方名下：D.actors 由后端按 source.actor.agentId 归集。
+// 旧归档超出宿主账本窗口的记录没有执行者身份，单列为 sub:unknown，不静默归给委托方。
+var ACTOR_UNKNOWN_ID = "sub:unknown";
+function isPoolAgent(id){
+  var pool=(D&&D.poolAgentIds)||[];
+  for(var i=0;i<pool.length;i++) if(pool[i]===id) return true;
+  return false;
+}
+function actorName(a){
+  if(!a) return "";
+  if(a.id===ACTOR_UNKNOWN_ID) return "子代理（执行者未提供）";
+  var known = (D && D.agentNames && D.agentNames[a.id]) || a.name || null;
+  var n;
+  // 池成员的名字可能与供应商重名（DeepSeek / Gemini），带上 id 才不会读错；
+  // 名字就是 id（大小写不同）时不重复写两遍。
+  if(known && isPoolAgent(a.id) && known.toLowerCase() !== String(a.id).toLowerCase()) n = known+"（"+a.id+"）";
+  else n = known || a.id;
+  if(a.deleted) n += "（历史 Agent）";
+  return n;
+}
+function actorList(){
+  var list = (D && D.actors && D.actors.length) ? D.actors : ((D && D.agents) || []).map(function(a){
+    var sub = a.subTotal || 0;
+    return {id:a.id,name:a.name,deleted:a.deleted,totalTokens:a.totalTokens,assistantCount:a.assistantCount,
+      selfTokens:(a.selfTokens!=null?a.selfTokens:a.totalTokens-sub),
+      delegatedTokens:(a.delegatedTokens!=null?a.delegatedTokens:sub),parents:{}};
+  });
+  return list.slice().sort(function(x,y){return (y.totalTokens||0)-(x.totalTokens||0);});
+}
 function _pn(p) { return (_provNames && _provNames[p]) || p; }
 // 展示币种偏好（localStorage + 头部按钮切换）：USD / CNY，全页单一币种
 function getDispCur() { try { return localStorage.getItem("tt-disp-cur") || "CNY"; } catch(e) { return "CNY"; } }
@@ -527,9 +557,9 @@ function renderModel() {
   var title = "模型占比";
   var unattributed=(D.models||[]).filter(function(m){return m.id==="unknown"&&!(m.totalTokens>0);}).reduce(function(n,m){return n+(m.assistantCount||0);},0);
   if (smv && !_selAgent) {
-    var ag=!D.agents?null:D.agents; if(!ag||!ag.length){emptyRank();return;}
+    var ag=actorList(); if(!ag||!ag.length){emptyRank();return;}
     title = "Agent 占比";
-    items = ag.map(function(a,i){var n=(D.agentNames||{})[a.id]||a.id;if(a.deleted)n+='（历史 Agent）';return{label:n,tokens:a.totalTokens,count:a.assistantCount||0,color:cc.agent[i%cc.agent.length]};});
+    items = ag.map(function(a,i){return{label:actorName(a),tokens:a.totalTokens,count:a.assistantCount||0,color:cc.agent[i%cc.agent.length]};});
   } else if (D.providerBreakdown && D.providerBreakdown.length) {
     // 供应商选择分类（卡内筛选，仅影响模型占比视图）
     var provs=[], seenP={};
@@ -601,15 +631,41 @@ function renderModel() {
 function renderAgent() {
   const cc = chartColors(); if (ac) ac.destroy();
   if (_selAgent && !_selModel) {
-    var ag=D.agents.find(function(a){return a.id===_selAgent}); if(!ag||!ag.models)return;
-    var mods=Object.entries(ag.models).sort(function(a,b){return(b[1].totalTokens||0)-(a[1].totalTokens||0)});
+    // 选中某个 Agent 时看它自己执行的模型分布，不再把子代理的模型混进去。
+    var pool=actorList(), agSel=null;
+    for(var ai=0;ai<pool.length;ai++){if(pool[ai].id===_selAgent){agSel=pool[ai];break;}}
+    if(!agSel){agSel=!D.agents?null:D.agents.find(function(a){return a.id===_selAgent});}
+    if(!agSel||!agSel.models)return;
+    var mods=Object.entries(agSel.models).map(function(m){var v=m[1];return [m[0], (v&&typeof v==="object")?(v.totalTokens||0):(v||0)];});
+    mods=mods.filter(function(m){return m[1]>0;}).sort(function(a,b){return b[1]-a[1]});
     if(!mods.length)return;
-    $("ac").parentElement.querySelector(".ct").textContent="模型占比";
-    ac = new Chart($("ac"),{type:"bar",data:{labels:mods.map(function(m){return m[0]}),datasets:[{label:"消耗",data:mods.map(function(m){return m[1].totalTokens||0}),backgroundColor:cc.doughnut.slice(0,mods.length),borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,color:cc.text,indexAxis:"y",scales:{x:{grid:{color:cc.grid},ticks:{callback:function(v){return fmtAxis(v)},font:{size:12}}},y:{grid:{display:false},ticks:{font:{size:12}}}},plugins:{legend:{display:false},tooltip:{backgroundColor:"rgba(24,24,27,0.92)",titleFont:{size:12,weight:'600'},bodyFont:{size:12},padding:10,cornerRadius:8,boxPadding:4}}}});
+    $("ac").parentElement.querySelector(".ct").textContent="模型占比（本人执行）";
+    ac = new Chart($("ac"),{type:"bar",data:{labels:mods.map(function(m){return m[0]}),datasets:[{label:"消耗",data:mods.map(function(m){return m[1]}),backgroundColor:cc.doughnut.slice(0,mods.length),borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,color:cc.text,indexAxis:"y",scales:{x:{grid:{color:cc.grid},ticks:{callback:function(v){return fmtAxis(v)},font:{size:12}}},y:{grid:{display:false},ticks:{font:{size:12}}}},plugins:{legend:{display:false},tooltip:{backgroundColor:"rgba(24,24,27,0.92)",titleFont:{size:12,weight:'600'},bodyFont:{size:12},padding:10,cornerRadius:8,boxPadding:4}}}});
   } else {
-    var ags=!D.agents?null:D.agents; if(!ags||!ags.length)return;
-    $("ac").parentElement.querySelector(".ct").textContent="Agent 消耗对比";
-    ac = new Chart($("ac"),{type:"bar",data:{labels:ags.map(function(a){var n=(D.agentNames||{})[a.id]||a.id;if(a.deleted)n+='（历史 Agent）';return n}),datasets:[{label:"消耗",data:ags.map(function(a){return a.totalTokens}),backgroundColor:cc.agent.slice(0,ags.length),borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,color:cc.text,indexAxis:"y",scales:{x:{grid:{color:cc.grid},ticks:{callback:function(v){return fmtAxis(v)},font:{size:12}}},y:{grid:{display:false},ticks:{font:{size:12}}}},plugins:{legend:{display:false},tooltip:{backgroundColor:"rgba(24,24,27,0.92)",titleFont:{size:12,weight:'600'},bodyFont:{size:12},padding:10,cornerRadius:8,boxPadding:4}}}});
+    var ags=actorList(); if(!ags||!ags.length)return;
+    $("ac").parentElement.querySelector(".ct").textContent="Agent 消耗（按执行者）";
+    var acTitle=$("ac").parentElement.querySelector(".ct");
+    acTitle.title="按实际执行请求的 Agent 统计：子代理的消耗算在执行它的 Agent 名下，不并入委托方。悬停看委托关系。";
+    var dSelf=[],dDel=[];
+    for(var qi=0;qi<ags.length;qi++){dSelf.push(ags[qi].selfTokens||0);dDel.push(ags[qi].delegatedTokens||0);}
+    var cA=cc.agent[0]||"#007AFF", cB=cc.agent[1]||"#FF9500";
+    var actorTooltip={backgroundColor:"rgba(24,24,27,0.92)",titleFont:{size:12,weight:'600'},bodyFont:{size:12},padding:10,cornerRadius:8,boxPadding:4,callbacks:{afterBody:function(items){
+      var a=ags[items[0].dataIndex]; if(!a)return [];
+      var out=[];
+      if(a.id===ACTOR_UNKNOWN_ID) out.push("这些请求由子代理执行，但账本接口没有提供执行者身份");
+      var ps=a.parents||{}, ids=Object.keys(ps).sort(function(x,y){return ps[y]-ps[x];});
+      for(var k=0;k<ids.length;k++) out.push("受托于 "+(((D&&D.agentNames&&D.agentNames[ids[k]])||ids[k]))+"："+fmtAxis(ps[ids[k]]));
+      return out;
+    }}};
+    var actorLegend={display:true,position:"top",align:"start",labels:{color:cc.text,boxWidth:8,boxHeight:8,font:{size:11,weight:'500'},padding:12,usePointStyle:true,pointStyle:"circle"}};
+    var actorData={labels:ags.map(actorName),datasets:[
+      {label:"本体使用",data:dSelf,backgroundColor:cA,stack:"ag",borderRadius:4,borderSkipped:false,maxBarThickness:22},
+      {label:"受托代跑",data:dDel,backgroundColor:cB,stack:"ag",borderRadius:4,borderSkipped:false,maxBarThickness:22}
+    ]};
+    var actorOptions={responsive:true,maintainAspectRatio:false,color:cc.text,indexAxis:"y",
+      scales:{x:{stacked:true,grid:{color:cc.grid},ticks:{callback:function(v){return fmtAxis(v)},font:{size:12}}},y:{stacked:true,grid:{display:false},ticks:{font:{size:12}}}},
+      plugins:{legend:actorLegend,tooltip:actorTooltip}};
+    ac = new Chart($("ac"),{type:"bar",data:actorData,options:actorOptions});
   }
 }
 

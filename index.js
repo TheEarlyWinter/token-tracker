@@ -92,6 +92,8 @@ export default defineApp(async (sdk) => {
     sdk,
     interval,
     sourceResolver,
+    // 部署改名/新建 Agent 后看板不用等重启；节流在 refreshAgentNames 里。
+    afterScan: () => refreshAgentNames(shared),
   });
   shared.scheduler = scheduler;
   shared.scan = scheduler.scan;

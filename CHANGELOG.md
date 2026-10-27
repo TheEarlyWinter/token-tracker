@@ -1,3 +1,46 @@
+## 6.9.5
+
+- 执行者也能显示名字：宿主 `agent:list` 不列「子代理池」成员（`hana-artisan` / `luna` /
+  `gemini-coder` / `hana-explorer`），这些身份在接口层只有 id。引擎以 local-machine 档
+  读本机 `agents/<id>/config.yaml` 的 `agent.name`（不引 YAML 依赖，只取 `agent:` 段的
+  name/latinName，5 分钟 TTL 缓存，读不到就用 id）——所以 `hana-artisan` 现在显示为
+  `DeepSeek（hana-artisan）`，`hana-explorer` 为 `寻迹（hana-explorer）`。
+- 池成员名字只用于展示：它们不拥有会话桶，所以仍然不进 Agent 筛选下拉；
+  `poolAgentIds` 随扫描写入缓存，供前端拼「名字（id）」。
+
+## 6.9.4
+
+- 修正「历史 Agent」误标：执行者清单不再按 `agent:list` 名册盖章。
+  宿主不把子代理池成员（`hana-artisan` / `luna` / `gemini-coder` / `hana-explorer`）列入
+  `agent:list`，不在名册≠已退役；现在这些执行者只显示 id，不附「历史 Agent」。
+  委托方口径仍按名册判断，且改以 `lifecycle: "all"` 拿到退役 Agent 的名字。
+
+## 6.9.3
+
+- 引擎改以 `local-machine` 档运行，直接读宿主官方账本 `usage-ledger.sqlite`（新增能力 `app/runtime.local-machine`）：
+  - 新 `runtime/engine/services/ledger-source.js`：`node:sqlite` 只读打开账本，读 `entry_json`，按「主库 mtime + size + -wal」做指纹缓存；驱动缺失或老版本宿主时退回 `usage-ledger.json`；
+  - `usage:list` 降为兜底：引擎探不到账本（目录布局不明、文件不存在、无驱动）时仍走宿主接口，行为与旧版一致；
+  - 直读拿到的是未投影的原始条目，`source.actor.agentId` / `attribution.childAgentId` 齐全，执行者归因不再依赖补写脚本；
+  - 新增 RPC `ledger.probe` 与 `scan.begin.localLedger`；本地直读模式下 `scan.append` 直接拒绝推送条目，两种来源不会混在一起；
+  - Hana home 从 `<dataDir>/../..` 推导（布局必须为 `<HanaHome>/app-data/<appId>`），推不出来就不直读、回退 `usage:list`；可用 `TOKEN_TRACKER_HANA_HOME` 显式指定；
+  - 权限说明：`local-machine` 不提供文件系统隔离，引擎进程以当前用户身份可读本机文件，只用于读账本与归档；其余能力不变。
+
+## 6.9.2
+
+- 修正 Agent 用量的归属口径：谁跑的算谁的，不再把子代理的消耗并进委托方：
+  - 归一化新增执行者字段（`actorAgentId` / `parentAgentId`，来源 `source.actor.agentId` / `attribution.childAgentId`），归档随记录落盘；
+  - 聚合缓存按「日 × 模型」记录执行者分布（`dailyBreakdown[day].actors`，含本体/受托 token、委托方、模型明细），新增 `baseTotals` 保留子系统口径，Code 会话里的子代理不再被抹成 code；
+  - `build()` 新增 `actors` 执行者清单，并把 `agents[].subTotal` 改为「该 Agent 派出去的用量」（含 Code 命名空间下的子代理），补 `delegatedBy` 映射；
+  - 看板「Agent 消耗对比」改为「Agent 消耗（按执行者）」，堆叠本体/受托两段，悬停显示委托方与金额；
+  - 选中单个 Agent 时的模型图改为该 Agent 本人执行的模型分布；模型筛选下的「Agent 占比」排行改用执行者口径；
+  - 可视化分析（Agent 维度热力/流向）同步改用执行者口径，旧缓存缺字段时回退到委托方；
+  - 旧归档补写：`scripts/backfill-actor-from-ledger.mjs` 从宿主官方账本（`usage-ledger.sqlite`）为窗口内的旧记录补写执行者，只追加不删除；
+  - 已知限制：应用通过 `usage:list` 拿到的记录是宿主投影对象，投影里保留了 `attribution.childSessionId` 但**丢掉了 `attribution.childAgentId` 与 `source.actor`**，所以新产生的子代理请求只能知道自己被谁派出、不知道是谁在跑。这类记录单列为「子代理（执行者未提供）」，不静默归给委托方；宿主补上该字段后无需再改应用代码（归一化已优先读 `source.actor.agentId` / `attribution.childAgentId`）；
+  - 缓存版本升到 21，首次扫描触发一次全量重算。
+- 修复超大会话记录导致的翻页失败：单条记录超 RPC 页预算时只裁剪传输副本里最旧的 `conversations`，
+  留最近的能装下的部分并标 `conversationsTruncated` / `conversationsTotal`；磁盘缓存与 SQLite 明细索引仍保留全量。
+  （重演：10-25 那个 Code 桶已到 896KB，新增执行者维度后越过 900KB 页限制，首次同步会报 `RECORD_TOO_LARGE`。）
+
 ## 6.9.1
 
 - 正式同步 Code 统计与版本入口：
