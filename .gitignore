@@ -16,3 +16,14 @@ Thumbs.db
 !assets/
 !assets/*.png
 !ui/assets/face.png
+
+# 本机凭据与运行数据（App 运行时写在 <dataDir>，绝不能进仓库）
+app-data/
+*.db
+*.db-journal
+*-console.json
+*-platform.json
+balance-apis.json
+credentials*.json
+.env
+.env.*
