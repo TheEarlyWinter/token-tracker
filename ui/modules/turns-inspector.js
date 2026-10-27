@@ -2,6 +2,7 @@
 // Turn 级单轮细粒度明细排障面板：支持未命中输入倒序、极端门槛过滤、分页与 CSV 导出
 
 import { escapeHtml, formatToken } from "../dashboard-format.js";
+import { hitRateLabel } from "../hit-rate.js";
 
 export function createTurnsInspector({
   container,
@@ -23,6 +24,9 @@ export function createTurnsInspector({
     pageSize: 50,
     loading: false,
     data: { rows: [], total: 0, sumTokens: 0, totalPages: 1 },
+    // 点开某一行后的逐次调用上下文：
+    // { requestId, loading, error, payload } —— 只存一个，再点另一行就替换。
+    detail: null,
   };
 
   function fmtNum(n) {
@@ -38,11 +42,47 @@ export function createTurnsInspector({
   }
 
   function fmtPct(read, uncached) {
-    const r = Number(read || 0);
-    const u = Number(uncached || 0);
-    const total = r + u;
-    if (total <= 0) return "—";
-    return ((r / total) * 100).toFixed(1) + "%";
+    return hitRateLabel(read, uncached);
+  }
+
+  // 单次调用的估算费用：分币级别的小数字留着四位，不然一排 ¥0.00 什么也看不出来。
+  function fmtCost(cost, currency) {
+    if (cost == null || !Number.isFinite(Number(cost))) return "—";
+    const symbol = currency === "USD" ? "$" : "¥";
+    const n = Number(cost);
+    return symbol + (n >= 1 ? n.toFixed(2) : n.toFixed(4));
+  }
+
+  function fmtGap(ms) {
+    if (ms == null || !Number.isFinite(Number(ms))) return "—";
+    const n = Number(ms);
+    if (n < 1000) return n + "ms";
+    if (n < 60000) return (n / 1000).toFixed(1) + "s";
+    return (n / 60000).toFixed(1) + "min";
+  }
+
+  // 读一轮会话的逐次调用。只存最后一次点击的结果，避免连点几十行撑爆内存。
+  async function loadDetail(requestId) {
+    if (!requestId) {
+      state.detail = { requestId: null, loading: false, error: "这一行没有 requestId（旧索引或 SQLite 不可用），拿不到逐次调用", payload: null };
+      render();
+      return;
+    }
+    state.detail = { requestId, loading: true, error: null, payload: null };
+    render();
+    try {
+      const res = await fetchFn("/turn?requestId=" + encodeURIComponent(requestId));
+      const payload = await res.json();
+      if (!res.ok || payload?.ok === false) {
+        state.detail = { requestId, loading: false, error: payload?.message || payload?.error || "HTTP " + res.status, payload: null };
+      } else {
+        state.detail = { requestId, loading: false, error: null, payload };
+      }
+    } catch (e) {
+      state.detail = { requestId, loading: false, error: e.message || String(e), payload: null };
+    } finally {
+      render();
+    }
   }
 
   function copyToClipboardFallback(text) {
@@ -284,11 +324,12 @@ export function createTurnsInspector({
           const totalInput = uncached + cacheRead;
           const hit = fmtPct(cacheRead, uncached);
           const timeStr = r.at ? formatTime(r.at) : r.day || "—";
+          const isOpen = state.detail && state.detail.requestId && state.detail.requestId === r.requestId;
           const sourceTagHtml = r.type
             ? `<span class="source-tag source-${escapeHtml(r.type)}">${escapeHtml(r.type === "code" ? "Code" : r.type === "channel" ? "频道" : r.type === "desktop" ? "聊天" : r.type)}</span>`
             : "";
           return `
-            <tr>
+            <tr class="turns-row${isOpen ? " is-open" : ""}" data-request-id="${escapeHtml(r.requestId || "")}" title="点开看这一轮会话的逐次调用">
               <td class="col-time" title="${escapeHtml(r.at)}">${escapeHtml(timeStr)}</td>
               <td class="col-agent"><span class="agent-tag">${escapeHtml(r.agent || "default")}</span>${sourceTagHtml}</td>
               <td class="col-model" title="${escapeHtml((r.provider ? r.provider + "/" : "") + r.model)}">
@@ -325,9 +366,101 @@ export function createTurnsInspector({
           </tbody>
         </table>
       `;
+
+      // 行点击 = 看这一轮会话的逐次调用（数据来自归档，不是从行上拼凑）。
+      tableWrap.querySelectorAll("tr.turns-row").forEach((tr) => {
+        tr.addEventListener("click", () => {
+          const rid = tr.getAttribute("data-request-id") || "";
+          if (state.detail && state.detail.requestId === rid && !state.detail.error) {
+            state.detail = null; // 再点一次同一条：收起
+            render();
+            return;
+          }
+          loadDetail(rid);
+        });
+      });
     }
 
     card.appendChild(tableWrap);
+
+    // ── 逐次调用详情 ──
+    if (state.detail) {
+      const d = state.detail;
+      const box = document.createElement("div");
+      box.className = "turns-detail";
+      box.setAttribute("role", "region");
+
+      if (d.loading) {
+        box.innerHTML = `<div class="turns-detail-head">正在读取逐次调用…</div>`;
+      } else if (d.error) {
+        box.innerHTML = `
+          <div class="turns-detail-head">
+            <span class="turns-detail-title">拿不到逐次调用</span>
+            <button type="button" class="btn btn-sm turns-detail-close">收起</button>
+          </div>
+          <div class="turns-detail-note">${escapeHtml(d.error)}</div>
+        `;
+      } else {
+        const p = d.payload;
+        const totals = p.totals || {};
+        const callsHtml = (p.calls || [])
+          .map((c) => {
+            const current = c.requestId === d.requestId;
+            const uncached = Number(c.input || 0);
+            const cacheRead = Number(c.cacheRead || 0);
+            return `
+              <tr class="${current ? "is-current" : ""}">
+                <td class="col-time">${escapeHtml(formatTime(c.startedAt))}</td>
+                <td class="col-num">${escapeHtml(fmtGap(c.gapMs))}</td>
+                <td class="col-model"><span class="provider-prefix">${escapeHtml(c.provider || "")}</span><span class="model-name">${escapeHtml(c.model || "—")}</span></td>
+                <td class="col-num">${fmtNum(uncached)}</td>
+                <td class="col-num">${fmtNum(cacheRead)}</td>
+                <td class="col-num">${fmtNum(c.output)}</td>
+                <td class="col-hit"><span class="hit-pill">${escapeHtml(fmtPct(cacheRead, uncached))}</span></td>
+                <td class="col-status">${c.failed ? `<span class="turn-failed" title="${escapeHtml(c.status || "error")}">失败</span>` : `<span class="turn-ok">ok</span>`}</td>
+                <td class="col-num">${escapeHtml(fmtCost(c.cost, c.currency))}</td>
+              </tr>
+            `;
+          })
+          .join("") || `<tr><td colspan="9" class="turns-detail-note">这一轮没有可读的调用记录</td></tr>`;
+
+        const notes = [];
+        if (p.sessionKnown === false) notes.push("这条记录没带会话号，只能给岀它自己那一次调用。");
+        if (p.truncated) notes.push(`调用太多，这里只给第 ${p.windowStart + 1}–${p.windowStart + (p.calls || []).length} 次（共 ${fmtNum(p.callCount)} 次），以你点的那条为中心。`);
+        if (p.totalCost == null && (p.calls || []).length) notes.push("有调用缺价格，合计费用不估。");
+
+        box.innerHTML = `
+          <div class="turns-detail-head">
+            <span class="turns-detail-title">这一轮会话共 ${fmtNum(p.callCount || 0)} 次调用${totals.failedCalls ? ` · 失败 ${fmtNum(totals.failedCalls)} 次` : ""} · 合计 ${formatToken(totals.totalTokens || 0)} Token${p.totalCost != null ? ` · 估算 ${escapeHtml(fmtCost(p.totalCost, (p.calls || [])[0]?.currency))}` : ""}</span>
+            <button type="button" class="btn btn-sm turns-detail-close">收起</button>
+          </div>
+          ${notes.length ? `<div class="turns-detail-note">${notes.map(escapeHtml).join("　")}</div>` : ""}
+          <div class="turns-detail-table-wrap">
+            <table class="turns-table turns-detail-table">
+              <thead>
+                <tr>
+                  <th class="col-time">时间</th>
+                  <th class="col-num">间隔</th>
+                  <th class="col-model">模型</th>
+                  <th class="col-num">未命中输入</th>
+                  <th class="col-num">缓存读</th>
+                  <th class="col-num">输出</th>
+                  <th class="col-hit">缓存率</th>
+                  <th class="col-status">状态</th>
+                  <th class="col-num">费用</th>
+                </tr>
+              </thead>
+              <tbody>${callsHtml}</tbody>
+            </table>
+          </div>
+          <div class="turns-detail-note">高亮行是你点的那一次。间隔 = 与上一次调用的起始时间差，含排队与工具往返，不是耗时。</div>
+        `;
+      }
+
+      const closeBtn = box.querySelector(".turns-detail-close");
+      if (closeBtn) closeBtn.onclick = () => { state.detail = null; render(); };
+      card.appendChild(box);
+    }
 
     // Footer 分页
     const footer = document.createElement("div");

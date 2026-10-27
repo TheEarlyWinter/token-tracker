@@ -1,6 +1,7 @@
 // ui/function-panel.js — 宿主功能面板 (Function Panel) Codex 额度与 DeepSeek 余额挂载模块
 import { renderCodexQuotaCard } from "./modules/codex-card.js";
 import { renderDeepSeekCard } from "./modules/deepseek-card.js";
+import { renderLithosCard } from "./modules/lithos-card.js";
 import { hana } from "./assets/sdk.js";
 
 // 常驻顶层 BroadcastChannel 引用，防止局部变量被垃圾回收 (GC) 导致监听器失效
@@ -53,6 +54,18 @@ async function fetchCodexQuota(force = false) {
   return await res.json();
 }
 
+async function fetchLithosBalance(force = false) {
+  const query = force ? "?refresh=1" : "";
+  if (window.hana?.api?.fetch) {
+    try {
+      const res = await window.hana.api.fetch(`/lithos-balance${query}`);
+      return await res.json();
+    } catch {}
+  }
+  const res = await fetch(`${getAppApiBase()}/lithos-balance${query}`);
+  return await res.json();
+}
+
 async function fetchDeepSeekBalance(force = false) {
   const query = force ? "?refresh=1" : "";
   if (window.hana?.api?.fetch) {
@@ -71,6 +84,8 @@ export async function loadAndRender(force = false, directSettings = null) {
   const emptyNotice = document.getElementById("fp-empty-notice");
   const codexSlot = document.getElementById("codex-card-slot");
   const dsSlot = document.getElementById("deepseek-card-slot");
+  const lithosSection = document.getElementById("fp-lithos-section");
+  const lithosSlot = document.getElementById("lithos-card-slot");
   const refreshBtn = document.getElementById("fp-refresh");
   if (refreshBtn) refreshBtn.disabled = true;
 
@@ -98,6 +113,12 @@ export async function loadAndRender(force = false, directSettings = null) {
           .catch(err => ({ type: "codex", err }))
       );
     }
+    // LithosAI 卡自己决定显不显示（没配 Cookie 就整块隐藏），不走设置开关。
+    tasks.push(
+      fetchLithosBalance(force)
+        .then(data => ({ type: "lithos", data }))
+        .catch(err => ({ type: "lithos", err }))
+    );
     if (showDeepseek) {
       tasks.push(
         fetchDeepSeekBalance(force)
@@ -114,11 +135,16 @@ export async function loadAndRender(force = false, directSettings = null) {
       } else if (res.type === "deepseek") {
         if (res.data) renderDeepSeekCard(dsSlot, res.data);
         else renderDeepSeekCard(dsSlot, { connected: false, message: "余额加载失败" });
+      } else if (res.type === "lithos") {
+        // 没数据也算「没配」：卡按 not_configured 处理，自己隐藏
+        if (res.data) renderLithosCard(lithosSlot, res.data);
+        else renderLithosCard(lithosSlot, { reason: "not_configured" });
       }
     }
 
     const hasVisibleSection = (codexSection && codexSection.style.display !== "none") ||
-                              (dsSection && dsSection.style.display !== "none");
+                              (dsSection && dsSection.style.display !== "none") ||
+                              (lithosSection && lithosSection.style.display !== "none");
     if (emptyNotice) {
       if (!hasVisibleSection) {
         emptyNotice.style.display = "";

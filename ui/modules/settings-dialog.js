@@ -27,6 +27,12 @@ export function initSettingsDialog({ onThemeChange, onSettingsSaved, fetchFn } =
   const codexToggle = document.getElementById("set-show-codex");
   const dsToggle = document.getElementById("set-show-deepseek");
   const msgEl = document.getElementById("set-msg");
+  const lithosInput = document.getElementById("set-lithos-cookie");
+  const lithosSave = document.getElementById("set-lithos-save");
+  const lithosStatus = document.getElementById("set-lithos-status");
+  const dsKeyInput = document.getElementById("set-ds-key");
+  const dsSave = document.getElementById("set-ds-save");
+  const dsStatus = document.getElementById("set-ds-status");
 
   let currentSettings = { scanInterval: 60, highUsageThreshold: 30000, showCodexQuota: true, showDeepseekBalance: true };
   let inFlightPromise = null;
@@ -62,6 +68,124 @@ export function initSettingsDialog({ onThemeChange, onSettingsSaved, fetchFn } =
     return inFlightPromise;
   }
 
+  function setDsStatus(text, isError = false) {
+    if (!dsStatus) return;
+    dsStatus.textContent = text;
+    dsStatus.style.color = isError ? "var(--orange)" : "var(--text-tertiary)";
+  }
+
+  // DeepSeek 余额卡消失最常见的原因：宿主里删掉了 DeepSeek 供应商，凭据跟着没了。
+  // 所以这里允许单独填一把「只用来查余额」的 key，存在 balance-apis.json，不碰供应商配置。
+  async function loadDsStatus() {
+    if (typeof fetchFn !== "function") return;
+    try {
+      const res = await fetchFn("/deepseek-balance");
+      const data = await res.json();
+      if (data?.connected) setDsStatus(`已连接 · 余额 ${data.display || "—"}`);
+      else if (data?.reason === "not_connected") setDsStatus("未配置密钥（宿主里没有 DeepSeek 供应商时会这样）");
+      else setDsStatus(data?.message || "查询失败", true);
+    } catch {
+      setDsStatus("查询失败", true);
+    }
+  }
+
+  if (dsSave) {
+    dsSave.onclick = async () => {
+      const apiKey = dsKeyInput?.value?.trim() || "";
+      if (!apiKey) {
+        setDsStatus("先填 API Key", true);
+        return;
+      }
+      dsSave.disabled = true;
+      setDsStatus("正在保存并查询…");
+      try {
+        const saveRes = await fetchFn("/balance-apis", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ deepseek: { apiKey } }),
+        });
+        if (!saveRes.ok) {
+          setDsStatus("保存失败（HTTP " + saveRes.status + "）", true);
+          return;
+        }
+        const res = await fetchFn("/deepseek-balance?refresh=1");
+        const data = await res.json();
+        if (data?.connected) {
+          setDsStatus(`已连接 · 余额 ${data.display || "—"}`);
+          if (dsKeyInput) dsKeyInput.value = "";
+        } else {
+          setDsStatus(data?.message || "已保存，但查询失败", true);
+        }
+        try {
+          getSettingsBroadcastChannel()?.postMessage({ type: "tt-quota-updated" });
+        } catch {}
+      } catch (e) {
+        setDsStatus("保存失败：" + (e?.message || String(e)), true);
+      } finally {
+        dsSave.disabled = false;
+      }
+    };
+  }
+
+  function setLithosStatus(text, isError = false) {
+    if (!lithosStatus) return;
+    lithosStatus.textContent = text;
+    lithosStatus.style.color = isError ? "var(--orange)" : "var(--text-tertiary)";
+  }
+
+  // Lithos 余额只能走控制台会话，所以设置页只管「粘 Cookie」这件事。
+  // 打开面板时问一次现状：已连接就把余额写出来，别让用户猜它到底配没配。
+  async function loadLithosStatus() {
+    if (typeof fetchFn !== "function") return;
+    try {
+      const res = await fetchFn("/lithos-balance");
+      const data = await res.json();
+      if (data?.connected) setLithosStatus(`已连接 · 余额 ${data.display || "—"}`);
+      else if (!data?.configured) setLithosStatus("未配置");
+      else setLithosStatus(data?.message || "已配置，但这次查询失败", true);
+    } catch {
+      setLithosStatus("查询失败", true);
+    }
+  }
+
+  if (lithosSave) {
+    lithosSave.onclick = async () => {
+      const cookie = lithosInput?.value?.trim() || "";
+      if (!cookie) {
+        setLithosStatus("先粘贴 Cookie 请求头", true);
+        return;
+      }
+      lithosSave.disabled = true;
+      setLithosStatus("正在保存并查询…");
+      try {
+        const res = await fetchFn("/lithos-balance", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ cookie }),
+        });
+        const data = await res.json();
+        if (!res.ok || data?.ok === false) {
+          setLithosStatus(data?.message || "保存失败", true);
+        } else {
+          const b = data.balance || {};
+          if (b.connected) {
+            setLithosStatus(`已连接 · 余额 ${b.display || "—"}`);
+            if (lithosInput) lithosInput.value = "";
+          } else {
+            setLithosStatus(b.message || "已保存，但查询失败", true);
+          }
+          try {
+            getSettingsBroadcastChannel()?.postMessage({ type: "tt-quota-updated" });
+          } catch {}
+        }
+      } catch (e) {
+        setLithosStatus("保存失败：" + (e?.message || String(e)), true);
+      } finally {
+        lithosSave.disabled = false;
+      }
+    };
+  }
+
   function showMsg(text, isError = false) {
     if (!msgEl) return;
     msgEl.textContent = text;
@@ -77,6 +201,8 @@ export function initSettingsDialog({ onThemeChange, onSettingsSaved, fetchFn } =
     syncThemeUI(isDark ? "dark" : "light", getThemeMode());
     if (shade) shade.style.display = "";
     if (panel) panel.style.display = "";
+    loadLithosStatus();
+    loadDsStatus();
     loadSettingsData();
   }
 

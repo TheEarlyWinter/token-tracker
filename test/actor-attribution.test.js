@@ -10,9 +10,11 @@ import os from "node:os";
 import path from "node:path";
 import vm from "node:vm";
 import { createLedgerEngine } from "../runtime/engine/ledger-engine.mjs";
+import { hitRatePercent } from "../ui/hit-rate.js";
 
 const source = fs.readFileSync(new URL("../server/dashboard.js", import.meta.url), "utf8");
-const context = vm.createContext({ fs, path, Intl, Date, DEFAULT_PRICE_TABLE: {} });
+// build() 现在经 ui/hit-rate.js 算 KPI 命中率：沙箱里把同一份实现注入，别在测试里另写一份式子。
+const context = vm.createContext({ fs, path, Intl, Date, DEFAULT_PRICE_TABLE: {}, hitRatePercent });
 vm.runInContext(source.slice(source.indexOf("function pickPrice("), source.indexOf("// 缓存汇率")), context);
 vm.runInContext(source.slice(source.indexOf("function build(cache,")), context);
 const build = context.build;

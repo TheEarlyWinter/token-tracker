@@ -6,9 +6,11 @@ import path from "node:path";
 import vm from "node:vm";
 import { createLedgerEngine } from "../runtime/engine/ledger-engine.mjs";
 import { buildVisualAnalytics } from "../runtime/engine/services/visual-analytics.js";
+import { hitRatePercent } from "../ui/hit-rate.js";
 
 const source = fs.readFileSync(new URL("../server/dashboard.js", import.meta.url), "utf8");
-const context = vm.createContext({ fs, path, Intl, Date, DEFAULT_PRICE_TABLE: {} });
+// build() 经 ui/hit-rate.js 算 KPI 命中率，沙箱要拿到同一份实现。
+const context = vm.createContext({ fs, path, Intl, Date, DEFAULT_PRICE_TABLE: {}, hitRatePercent });
 vm.runInContext(source.slice(source.indexOf("function pickPrice("), source.indexOf("// 缓存汇率")), context);
 vm.runInContext(source.slice(source.indexOf("function build(cache,")), context);
 const build = context.build;

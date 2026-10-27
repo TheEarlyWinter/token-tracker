@@ -18,7 +18,7 @@ const MAX_SOURCE_ENTRIES = 256;
 const TURNS_INDEX_KEY = "bucket-v1";
 const MAX_PENDING_SOURCES = 256;
 const MAX_NAMESPACE_LENGTH = 64;
-const CACHE_VERSION = 21;
+const CACHE_VERSION = 22;
 const MAX_LEDGER_LIMIT = 20000;
 // 子代理记录如果拿不到执行者身份，单独归集，不静默计入委托方。
 // 宿主 `usage:list` 的投影不含 attribution.childAgentId / source.actor，
@@ -99,6 +99,8 @@ function addRecordToBucket(bucket, record, day, hour) {
     outTokens: output,
     cacheRead,
     msgCount: 1,
+    // 明细行点开要按这条请求去归档里捞逐次调用，requestId 是唯一的钩子。
+    requestId: record.requestId || null,
   });
 
   if (!bucket.models[model]) bucket.models[model] = { input: 0, inputUncached: 0, output: 0, cacheRead: 0, cacheWrite: 0, count: 0 };
@@ -236,6 +238,18 @@ function accumulateActor(container, { actorId, parentId, baseType, model, provid
 
 // 单条会话记录在 RPC 页里的预算（留出信封余量，宿主单条上限 1MB）。
 const RECORD_BUDGET = 900 * 1024;
+
+// 发给前端的副本：逐条 conversations 里只保留展示需要的字段。
+// requestId 只给「点开一行看逐次调用」用，服务端查 SQLite turns 表就够了，
+// 浏览器不需要它——不剥掉的话最大的桶会从 896KB 顶到 900KB 的页预算之上，
+// 反而触发最近若干条被裁掉。磁盘缓存与 SQLite 索引里保留全量。
+function toTransportRecord(record) {
+  if (!record || !Array.isArray(record.conversations) || !record.conversations.length) return record;
+  return {
+    ...record,
+    conversations: record.conversations.map((c) => (c && c.requestId !== undefined ? { ...c, requestId: undefined } : c)),
+  };
+}
 
 // 只为传输裁剪一条超大记录的 conversations：留最近的能装下的部分，标记截断与总数。
 // 不改磁盘缓存、不删明细索引：详细视图优先走 SQLite turns 表，这里只是兵底副本。
@@ -842,7 +856,7 @@ export class LedgerEngine {
     let index = start;
     while (index < keys.length) {
       const key = keys[index];
-      const record = this.data.sessions[key];
+      const record = toTransportRecord(this.data.sessions[key]);
       let row = record;
       let rowBytes = Buffer.byteLength(JSON.stringify({ [key]: record }));
       if (Object.keys(sessions).length && bytes + rowBytes > maxBytes) break;

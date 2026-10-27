@@ -39,6 +39,7 @@ test("Manifest V2 合规性与权限最小化校验", () => {
     "app/sessions.read",
     "app/media.tasks.read",
     "app/resources.write",
+    "app/ui.open-external",
   ];
   assert.deepEqual(
     [...manifest.capabilities].sort(),
@@ -79,8 +80,10 @@ test("Manifest V2 合规性与权限最小化校验", () => {
   // 网络声明校验
   assert.deepEqual(
     [...(manifest.network?.allowedHosts || [])].sort(),
-    ["api.deepseek.com", "chatgpt.com", "open.er-api.com"].sort(),
-    "network.allowedHosts 必须包含 chatgpt.com、api.deepseek.com 与 open.er-api.com"
+    // 出网白名单是全量断言，不是「包含」：多一个域名必须在这里显式加，免得悄悄扩权
+    ["api.deepseek.com", "chatgpt.com", "open.er-api.com", "platform.deepseek.com",
+    "console.lithosai.cloud"].sort(),
+    "network.allowedHosts 应恰好是这几家：余额查询（DeepSeek API、Lithos 控制台）与汇率"
   );
   assert.deepEqual(manifest.network?.methods, ["GET"], "network.methods 仅需 GET");
 

@@ -359,6 +359,40 @@ body {
   padding: 2px 0;
 }
 
+/* 余额卡上的「充值 ↗」：跟徽标同一排，做得比链接显眼、比主按钮安静 */
+.sb-codex-topup {
+  appearance: none;
+  border: 1px solid var(--card-border, #e4e4e7);
+  background: transparent;
+  color: var(--text-secondary, #52525b);
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.sb-codex-topup:hover {
+  color: var(--text-primary, #18181b);
+  border-color: var(--text-tertiary, #a1a1aa);
+  background: var(--bg-hover, #f4f4f5);
+}
+
+.sb-codex-topup:active {
+  transform: translateY(0.5px);
+}
+
+/* 深色主题下细边框容易看不见，给一点底色 */
+[data-hana-theme="midnight"],
+[data-hana-theme="obsidian"],
+[data-hana-theme="dark"] {
+  .sb-codex-topup {
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+}
+
 /* ── 4. 主内容视窗 ── */
 .main-area {
   flex: 1;
@@ -1924,6 +1958,351 @@ body {
   text-align: center;
   color: var(--text-tertiary);
   font-size: 13px;
+}
+
+/* ── 单轮明细：点开一行看这一轮会话的逐次调用 ── */
+.turns-row {
+  cursor: pointer;
+}
+
+.turns-row.is-open td {
+  background: var(--bg-hover);
+}
+
+.turns-row.is-open td:first-child {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.turns-detail {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  background: var(--bg-tag);
+}
+
+.turns-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.turns-detail-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.turns-detail-note {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 8px;
+}
+
+.turns-detail-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.turns-detail-table tr.is-current td {
+  background: var(--bg-hover);
+  font-weight: 600;
+}
+
+.turns-detail-table tr.is-current td:first-child {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.turn-ok {
+  color: var(--text-tertiary);
+}
+
+.turn-failed {
+  color: var(--orange);
+  font-weight: 600;
+}
+
+/* ── 视图页签（用量 / LithosAI 消费）── */
+.view-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 14px 0 4px;
+  border-bottom: 1px solid var(--divider);
+  padding-bottom: 0;
+}
+
+.vt {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.vt:hover {
+  color: var(--text-primary);
+}
+
+.vt.on {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent);
+}
+
+/* ── LithosAI 消费视图 ── */
+.lithos-spend-section {
+  margin-top: 16px;
+}
+
+.ls-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ls-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ls-head-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ls-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ls-sub {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.ls-head-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ls-updated {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.ls-refresh {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+.ls-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.ls-card {
+  background: var(--bg-card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 14px 16px;
+}
+
+.ls-k {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-bottom: 6px;
+}
+
+.ls-v {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.ls-hint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ls-chart-card,
+.ls-table-card {
+  background: var(--bg-card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 18px;
+}
+
+.ls-chart-box {
+  position: relative;
+  height: 280px;
+  margin-top: 12px;
+}
+
+.ls-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  margin-top: 10px;
+}
+
+.ls-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: left;
+}
+
+.ls-table th {
+  padding: 8px 10px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--divider);
+  white-space: nowrap;
+}
+
+.ls-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.ls-table tr:hover td {
+  background: var(--bg-hover);
+}
+
+.ls-strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ls-dim {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.ls-note {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  line-height: 1.6;
+}
+
+.ls-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.ls-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.ls-empty-note {
+  font-size: 12px;
+}
+
+.ls-empty-row {
+  text-align: center;
+  color: var(--text-tertiary);
+  padding: 24px 0;
+}
+
+/* 空状态里的令牌表单：就地把坑填了，不用再绕去设置 */
+.ls-empty-steps {
+  margin: 14px auto 0;
+  display: inline-block;
+  text-align: left;
+  font-size: 12px;
+  line-height: 1.9;
+  color: var(--text-tertiary);
+}
+
+.ls-empty-steps code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background: var(--bg-hover);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+
+.ls-token-form {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+.ls-token-form .set-input {
+  width: 320px;
+  max-width: 70vw;
+}
+
+.ls-token-error {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--orange);
+  line-height: 1.6;
+}
+
+/* 区间切换：本月 / 近 7 天 / 近 30 天 */
+.ds-range {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg-hover);
+  border-radius: 6px;
+}
+
+.ds-range-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.ds-range-btn:hover {
+  color: var(--text-primary);
+}
+
+.ds-range-btn.on {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-weight: 500;
+  box-shadow: var(--shadow-sm);
 }
 
 /* ── 17. 多 Agent 分析与河流图面板 (Agent Analytics) ── */

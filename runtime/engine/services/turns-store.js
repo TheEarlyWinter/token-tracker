@@ -23,6 +23,7 @@ const SCHEMA = [
      provider TEXT NOT NULL, model TEXT NOT NULL,
      total INTEGER NOT NULL, input INTEGER, output INTEGER,
      cache_read INTEGER, calls INTEGER,
+     request_id TEXT,
      PRIMARY KEY (session_key, seq)
    )`,
   `CREATE INDEX IF NOT EXISTS turns_at ON turns(at)`,
@@ -31,16 +32,25 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS store_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
 ];
 
+// 后加的列：老库不会因为 CREATE TABLE IF NOT EXISTS 长出它们，得单独补。
+// 只做 ADD COLUMN（SQLite 支持，不动已有行）；值由下一次全量 rebuild 填上。
+const ADDED_COLUMNS = [{ name: "request_id", ddl: "ALTER TABLE turns ADD COLUMN request_id TEXT" }];
+
 const INSERT_SQL =
-  "INSERT INTO turns (session_key, seq, at, day, agent, type, provider, model, total, input, output, cache_read, calls) " +
-  "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)";
+  "INSERT INTO turns (session_key, seq, at, day, agent, type, provider, model, total, input, output, cache_read, calls, request_id) " +
+  "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 const DELETE_SESSION_SQL = "DELETE FROM turns WHERE session_key = ?";
+
+// 命中率排序表达式：口径 = 缓存读 / 输入总量（含缓存读），与 ui/hit-rate.js 同一式子。
+// SQL 里调不到 JS，公式在这里抄一遍；test/hit-rate.test.js 拿同一批样本比对两边。
+export const HIT_SORT_EXPR =
+  "CASE WHEN (COALESCE(input, 0) + COALESCE(cache_read, 0)) > 0 THEN CAST(COALESCE(cache_read, 0) AS REAL) / (COALESCE(input, 0) + COALESCE(cache_read, 0)) ELSE NULL END";
 
 const SORT_EXPR = {
   time: "at",
   tokens: "total",
   uncached: "COALESCE(input, 0)",
-  hit: "CASE WHEN (COALESCE(input, 0) + COALESCE(cache_read, 0)) > 0 THEN CAST(COALESCE(cache_read, 0) AS REAL) / (COALESCE(input, 0) + COALESCE(cache_read, 0)) ELSE NULL END",
+  hit: HIT_SORT_EXPR,
 };
 
 const DEFAULT_LIMIT = 50;
@@ -104,6 +114,7 @@ export function turnRowsFor(key, session) {
       numOrNull(c.outTokens ?? c.outputTokens ?? c.output),
       numOrNull(c.cacheRead ?? c.cacheReadTokens),
       numOrNull(c.msgCount ?? c.calls ?? 1),
+      c.requestId == null ? null : String(c.requestId),
     ]);
   }
   return out;
@@ -120,8 +131,28 @@ export function createSqliteTurnsStore({ DatabaseSync, file, log = () => {} }) {
     try { d.exec("PRAGMA journal_mode = WAL"); } catch {}
     try { d.exec("PRAGMA synchronous = NORMAL"); } catch {}
     for (const sql of SCHEMA) d.exec(sql);
+    ensureColumns(d);
     db = d;
     return db;
+  }
+
+  // 老库补列：PRAGMA 里没有才 ALTER，重复启动不会报错。
+  function ensureColumns(d) {
+    let have = new Set();
+    try {
+      have = new Set(d.prepare("PRAGMA table_info(turns)").all().map((c) => String(c.name)));
+    } catch (e) {
+      log.warn?.("[token-tracker] turns 库结构读取失败：", e.message);
+      return;
+    }
+    for (const col of ADDED_COLUMNS) {
+      if (have.has(col.name)) continue;
+      try {
+        d.exec(col.ddl);
+      } catch (e) {
+        log.warn?.(`[token-tracker] turns 库补列 ${col.name} 失败：`, e.message);
+      }
+    }
   }
 
   function insertStatement(d) {
@@ -273,7 +304,7 @@ export function createSqliteTurnsStore({ DatabaseSync, file, log = () => {} }) {
     const offset = Number.isFinite(offRaw) && offRaw > 0 ? Math.floor(offRaw) : 0;
 
     const select =
-      "SELECT session_key AS sessionKey, seq, at, day, agent, type, provider, model, total, input, output, cache_read AS cacheRead, calls " +
+      "SELECT session_key AS sessionKey, seq, at, day, agent, type, provider, model, total, input, output, cache_read AS cacheRead, calls, request_id AS requestId " +
       "FROM turns" + clause + " ORDER BY " + orderBy;
 
     const rows = o.all === true

@@ -10,9 +10,13 @@ import { openTurnsStore, queryTurns, queryTurnSizes } from "../runtime/engine/se
 import { saveTurnsExport } from "../lib/turns-export.mjs";
 import { loadSettings, saveSettings } from "../lib/settings-store.mjs";
 import { buildDetailsCSV } from "../runtime/engine/services/details-csv.js";
+import { readSessionCalls } from "../runtime/engine/services/session-calls.js";
+import { hitRatePercent } from "../ui/hit-rate.js";
 import { buildVisualAnalytics } from "../runtime/engine/services/visual-analytics.js";
 import { CodexQuotaService } from "../lib/codex-quota.mjs";
 import { DeepSeekBalanceService } from "../lib/deepseek-balance.mjs";
+import { LithosBalanceService, looseCookieValues, monthToDateUtc } from "../lib/lithos-balance.mjs";
+import { DeepSeekUsageService } from "../lib/deepseek-usage.mjs";
 const UI_VERSION = JSON.parse(fs.readFileSync(new URL('../manifest.json', import.meta.url), 'utf8')).version;
 
 // OpenCode Go 官方定价表（opencode.ai/docs/go 校验）
@@ -255,6 +259,22 @@ export default function (app, ctx) {
     fetchFn: globalThis.fetch,
     ttlMs: 60_000,
     dataDir: ctx.dataDir,
+  });
+
+  // LithosAI 只有控制台接口能查余额（公开 API 无此端点），Cookie 存在 dataDir 里。
+  const lithosBalanceService = new LithosBalanceService({
+    dataDir: ctx.dataDir || "",
+    fetchFn: globalThis.fetch,
+    network: ctx.network,
+    log: ctx.log,
+  });
+
+  // DeepSeek 官方用量：只有网页登录令牌能读（API Key 不行），令牌存 dataDir。
+  const deepseekUsageService = new DeepSeekUsageService({
+    dataDir: ctx.dataDir || "",
+    fetchFn: globalThis.fetch,
+    network: ctx.network,
+    log: ctx.log,
   });
 
   // 数据接口处理器
@@ -526,6 +546,103 @@ export default function (app, ctx) {
     }
   };
 
+  // LithosAI 余额：GET 查，POST 存 Cookie（存完立刻查一次，粘完就能看到结果）。
+  const handleLithosBalance = async (c) => {
+    try {
+      const force = c.req.query("force") === "1" || c.req.query("refresh") === "1";
+      return c.json(await lithosBalanceService.getBalance({ force }));
+    } catch (e) {
+      return c.json({ provider: "lithos", connected: false, reason: "error", message: e.message || "Lithos 余额查询失败" }, 200);
+    }
+  };
+
+  // LithosAI 区间消费：默认本月至今（UTC），控制台按 UTC 切日。
+  const handleLithosSpend = async (c) => {
+    try {
+      const force = c.req.query("force") === "1" || c.req.query("refresh") === "1";
+      const month = monthToDateUtc();
+      const start = c.req.query("start") || month.start;
+      const end = c.req.query("end") || month.end;
+      return c.json(await lithosBalanceService.getSpend({ start, end, force }));
+    } catch (e) {
+      return c.json(
+        { provider: "lithos", connected: false, reason: "error", message: e.message || "Lithos 消费查询失败" },
+        200
+      );
+    }
+  };
+
+  const handleLithosConfig = async (c) => {
+    let body = {};
+    try { body = await c.req.json(); } catch { body = {}; }
+    const hasCookie = typeof body?.cookie === "string" && body.cookie.trim() !== "";
+    const action = body?.action || (hasCookie ? "save" : "status");
+
+    if (action === "clear") return c.json(lithosBalanceService.clearCookie());
+    if (action === "save") {
+      let saved = lithosBalanceService.saveCookie(body.cookie);
+      // 只给两串裸值（没带 cookie 名字）时，实测哪种顺序能登，不猜。
+      if (!saved.ok && saved.code === "MISSING_COOKIE") {
+        const values = looseCookieValues(body.cookie);
+        if (values) {
+          const resolved = await lithosBalanceService.resolveLooseCookie(values);
+          if (!resolved.ok) return c.json(resolved, 400);
+          saved = lithosBalanceService.saveCookie(resolved.cookie);
+          if (saved.ok) saved.resolvedBy = resolved.resolvedBy;
+        }
+      }
+      if (!saved.ok) return c.json(saved, 400);
+      const balance = await handleLithosBalance({
+        req: { query: (k) => (k === "force" ? "1" : "") },
+        json: (payload) => payload,
+      });
+      return c.json({ ...saved, balance });
+    }
+    return c.json({ configured: lithosBalanceService.configured() });
+  };
+
+  // DeepSeek 官方用量：平台只有按月接口，所以区间是「几个月相加」（本月 / 上月 / 近三个月）。
+  const handleDeepseekUsage = async (c) => {
+    try {
+      const force = c.req.query("force") === "1" || c.req.query("refresh") === "1";
+      const rangeKind = c.req.query("range") || "month";
+      const [usage, summary] = await Promise.all([
+        deepseekUsageService.getUsage({ range: rangeKind, force }),
+        deepseekUsageService.getSummary({ force }),
+      ]);
+      // 余额与用量互不牵连：一个挂了另一个照常给
+      return c.json({
+        ...usage,
+        provider: "deepseek-platform",
+        range: rangeKind,
+        balance: { connected: !!summary.connected, ...summary },
+      });
+    } catch (e) {
+      return c.json(
+        { provider: "deepseek-platform", connected: false, reason: "error", message: e.message || "DeepSeek 用量查询失败" },
+        200
+      );
+    }
+  };
+
+  const handleDeepseekUsageConfig = async (c) => {
+    let body = {};
+    try { body = await c.req.json(); } catch { body = {}; }
+    const hasToken = typeof body?.token === "string" && body.token.trim() !== "";
+    const action = body?.action || (hasToken ? "save" : "status");
+
+    if (action === "clear") return c.json(deepseekUsageService.clearToken());
+    if (action === "save") {
+      const saved = deepseekUsageService.saveToken(body.token);
+      if (!saved.ok) return c.json(saved, 400);
+      // 存完立刻验一次：令牌错了当场说，而不是让人切到用量页才发现
+      const summary = await deepseekUsageService.getSummary({ force: true });
+      if (!summary.connected) return c.json({ ...saved, ok: false, verified: false, summary }, 400);
+      return c.json({ ...saved, verified: true, summary });
+    }
+    return c.json({ configured: deepseekUsageService.configured() });
+  };
+
   // 刷新接口处理器
   const handleRefresh = async (c) => {
     try {
@@ -646,6 +763,54 @@ export default function (app, ctx) {
         error: "session_detail_forbidden",
         message: "无法获取会话对话历史（可能未授予 app/sessions.read 权限）: " + e.message
       }, 403);
+    }
+  };
+
+  // 明细行「点得开」：按 requestId 回归档捞出这一轮会话的逐次调用。
+  //
+  // 权威源是归档（一条 = 一次真实请求），turns 表只当索引；归档里找不到就如实说找不到，
+  // 不拿索引里那几个汇总字段拼一个看起来完整、实际是编的详情。
+  const handleTurnDetail = (c) => {
+    try {
+      const cache = ctx._tokenCache;
+      const requestId = c.req.query("requestId") || "";
+      const sessionId = c.req.query("sessionId") || "";
+      if (!requestId && !sessionId) {
+        return c.json({ ok: false, error: "缺少 requestId 或 sessionId", code: "MISSING_ARG" }, 400);
+      }
+      const dataDir = cache?.dataDir || ctx.dataDir || "";
+      const file = path.join(dataDir, "usage-archive.jsonl");
+      const res = readSessionCalls({ file, requestId, sessionId, log: ctx.log });
+      if (!res.ok) {
+        const status = res.code === "TURN_NOT_FOUND" ? 404 : res.code === "MISSING_ARG" ? 400 : 500;
+        return c.json(res, status);
+      }
+
+      // 费用用当前价格表算（与看板同一套查找规则）。没价格就给 null，不写 0 冒充免费。
+      const priceTable = loadPriceTable(dataDir);
+      const calls = res.calls.map((call) => {
+        const price = resolvePriceEntry(priceTable, call.provider, call.model);
+        const hour = call.startedAt ? new Date(call.startedAt).getHours() : undefined;
+        const cost = price
+          ? calcCost(price, {
+              input: call.input,
+              cacheRead: call.cacheRead,
+              cacheWrite: call.cacheWrite,
+              output: call.output,
+              callCount: 1,
+              assistantCount: 1,
+            }, hour)
+          : null;
+        return { ...call, cost, currency: price?.currency || "CNY" };
+      });
+      // 只有每一条都算出了价，总计才有意义；缺一条就整体给 null（宁可不给，也不给半个数）。
+      const totalCost = calls.length && calls.every((x) => x.cost != null)
+        ? calls.reduce((acc, x) => acc + x.cost, 0)
+        : null;
+
+      return c.json({ ...res, calls, totalCost });
+    } catch (err) {
+      return c.json({ ok: false, error: err.message, code: "TURN_DETAIL_ERROR" }, 500);
     }
   };
 
@@ -909,11 +1074,27 @@ export default function (app, ctx) {
   app.get("/dashboard/session/detail", handleSessionDetail);
   app.get("/session/detail", handleSessionDetail);
 
+  app.get("/dashboard/turn", handleTurnDetail);
+  app.get("/turn", handleTurnDetail);
+
   app.get("/dashboard/codex-quota", handleCodexQuota);
   app.get("/codex-quota", handleCodexQuota);
 
   app.get("/dashboard/deepseek-balance", handleDeepseekBalance);
   app.get("/deepseek-balance", handleDeepseekBalance);
+
+  app.get("/dashboard/deepseek-usage", handleDeepseekUsage);
+  app.get("/deepseek-usage", handleDeepseekUsage);
+  app.post("/dashboard/deepseek-usage", handleDeepseekUsageConfig);
+  app.post("/deepseek-usage", handleDeepseekUsageConfig);
+
+  app.get("/dashboard/lithos-balance", handleLithosBalance);
+  app.get("/lithos-balance", handleLithosBalance);
+  app.post("/dashboard/lithos-balance", handleLithosConfig);
+  app.post("/lithos-balance", handleLithosConfig);
+
+  app.get("/dashboard/lithos-spend", handleLithosSpend);
+  app.get("/lithos-spend", handleLithosSpend);
 
   app.get("/widget/stream", handleWidgetStream);
   app.get("/widget/data", handleWidgetData);
@@ -1293,7 +1474,10 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
     earliest,
     summary: {
       ...sums,
-      cacheHitRate: sums.totalTokens > 0 ? +((sums.totalCacheRead / sums.totalTokens * 100).toFixed(1)) : 0,
+      // 命中率只有一个口径：缓存读 / 输入总量（含缓存读），不含输出。
+      // 以前这里写的是 cacheRead / totalTokens（分母带了输出），于是「拿明细核对 KPI
+      // 永远对不上」；式子收进 ui/hit-rate.js，明细行与 KPI 卡用同一份实现。
+      cacheHitRate: hitRatePercent(sums.totalCacheRead, sums.totalInput + sums.totalCacheRead),
       estimatedCost,
     },
     agents,
@@ -1377,6 +1561,19 @@ function buildPredictionResponse(cache, daily) {
   else trend = "持平";
 
   return { ...base, predictedToday, trend };
+}
+
+// 价格查找：先按「供应商/模型」精确找，再按纯模型名，最后扫一遍 *\/模型 后缀。
+// 明细详情与看板费估算必须用同一套查找规则，否则同一次调用会在两处得到不同价。
+function resolvePriceEntry(priceTable, provider, model) {
+  if (!priceTable || !model) return null;
+  if (provider && priceTable[provider + "/" + model]) return priceTable[provider + "/" + model];
+  if (priceTable[model]) return priceTable[model];
+  const suffix = "/" + model;
+  for (const pk of Object.keys(priceTable)) {
+    if (pk.endsWith(suffix)) return priceTable[pk];
+  }
+  return null;
 }
 
 // 价格表与余额配置加载

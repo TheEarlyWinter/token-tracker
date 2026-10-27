@@ -1,3 +1,206 @@
+## 6.15.1
+
+### 修正官方用量接口：改用真正能用的那组端点
+
+6.15.0 按公开逆向文档实现了 `usage/by_api_key/amount?start=&end=&tz=`，**实测这条路走不通**：
+拿真令牌打过去返回 `biz_code 1 INVALID_PARAM`，四种参数组合都试过，全拒。
+
+用真令牌把端点扫了一遍，能用的是老的一组：
+
+- `GET /api/v0/usage/amount?month=<1-12>&year=<YYYY>` → `biz_data.days[].data[].usage[]`
+- `GET /api/v0/usage/cost?month=&year=` → `biz_data[0].days[].data[].usage[]`（**金额也用同一个 usage 数组**，
+  `amount` 是 token 数，`cost` 是同类型对应的钱，按类型累加即当天该模型的花费）
+- `GET /api/v0/users/get_user_summary` → `normal_wallets[] / bonus_wallets[] / total_costs[]`
+
+另外两个坑：
+
+- **WAF**：只带 `Authorization` 的裸请求会被挡成 429「Request Blocked」，
+  必须带 `Origin` / `Referer` / `Accept-Language` / 浏览器 UA / `x-client-platform`。
+- **余额字段**：没有文档里说的 `total_available_token_estimation`，
+  可用估算在 `normal_wallets[].token_estimation`；余额是 `14.9641625400000000` 这种精度，显示要收成两位。
+
+因此区间也跟着改成按月：**本月 / 上月 / 近 3 个月**（平台只给月粒度，摆 7 天/30 天是骗人的）。
+多个月合并时按模型累加，并用未舍入的原始成本累加，避免先舍入再相加漂出几分钱。
+
+真数据核对（2026-10-27）：本月 ¥17.94 / 371.5M tokens / 命中 98.9%；
+上月 ¥6.22；近三个月 ¥29.63；余额 ¥14.96。
+
+测试 262 项全过（fixture 直接取自真响应，不再按文档臆造）。
+
+## 6.15.0
+
+### 新增页签「DeepSeek 官方用量」
+
+看板顶部第三个页签。数据来自开放平台网页端自己在用的内部接口：
+
+- `GET /api/v0/usage/by_api_key/amount?start=&end=&tz=` → 按天 × 模型的 token（命中/未命中/输出/请求数）
+- `GET /api/v0/usage/by_api_key/cost?start=&end=&tz=` → 按天 × 模型的人民币金额（含峰谷）
+- `GET /api/v0/users/get_user_summary` → 余额 + 可用 token 估算
+
+**凭证是网页登录令牌，不是 API Key。** 这两套东西互不通用：余额用 API Key，
+用量要登录后平台下发的 userToken（浏览器 localStorage 里）。所以：
+
+- 空状态就把「去哪儿拿」写成三步（登录 → F12 → Local Storage → userToken），
+  输入框直接放在这个页签，不用绕去设置
+- 贴了 `sk-` 开头的 API Key 会被当场拦下并说明原因（实测平台对 API Key 稳定返回 40003）
+- 令牌 0600 存 `<dataDir>/deepseek-platform.json`；失效时页面显示重新粘贴入口，不沿用旧数
+
+页面内容：区间切换（本月 / 近 7 天 / 近 30 天）、四张卡（区间消费 / 今日 / 区间 Token /
+官方余额）、每日消费按模型堆叠柱状图、按模型表（消费、占比、输入与命中率、输出、请求、天数）。
+平台按 `tz` 参数切日，这里传本机时区偏移，让「今天」和用户看到的一致。
+
+金额是**官方账单**（人民币、含峰谷计价），与看板别处的估算费用不是一回事——这句话印在表下面。
+
+端点与字段是未公开契约。形状对不上时返回 `shape_changed` 并如实说明，不拼一个看着合理的数字。
+
+测试 251 → 262。
+
+## 6.14.0
+
+### 两张余额卡各配一个「充值 ↗」
+
+- DeepSeek 余额卡 → `https://platform.deepseek.com/top_up`
+- LithosAI 余额卡 → `https://console.lithosai.cloud/billing/general`
+
+点开走宿主的 `hana.external.open`（manifest 补了 `app/ui.open-external` 能力），
+拿不到这个能力时才退到 `window.open`，再不行弹提示让人手动开——不在沙箱里「点了没反应」。
+
+刻意没做的：**查不到余额时不摆充值按钮**。key 失效、会话过期时该修的是凭据，
+摆个充值入口反而把人往错方向引。
+
+地址集中在 `ui/external-link.js`，测试直接盯这两个字符串。
+
+测试 247 → 251。
+
+## 6.13.1
+
+- 修「填了正确的官方 key 仍报 DeepSeek API Key 无效」。根因是取凭据的顺序：
+  以前先问宿主总线（`provider:credentials` for `deepseek`），拿到了才轮到本机存的 key。
+  但宿主里名为 `deepseek` 的供应商现在指向的是中转站（实测 baseUrl 已是 api.lithosai.cloud），
+  那把 key 发给 api.deepseek.com 当然 401——而用户显式填的官方 key 从来没被用到。
+  顺序改成：**设置页显式填的 key 优先，宿主总线只当侧底**。
+- 用总线凭据被 401 时，错误文案会说明这把 key 来自哪个供应商，并提示「若它已改成中转站，
+  请在上方单独填官方 API Key」。
+
+测试 245 → 247。
+
+## 6.13.0
+
+### DeepSeek 余额卡不再因为「删了供应商」而消失
+
+原来的凭据只从宿主总线取（`provider:credentials` for deepseek），宿主里没有这个供应商就等于没凭据，
+卡直接隐藏——看上去像功能坏了，实际上是没地方填 key。
+
+- 设置页新增「DeepSeek 余额」：单独填一把只用于查余额的 API Key，存进 `balance-apis.json`，
+  不碰宿主的供应商配置。填完立刻查一次并把结果写在设置页上。
+- 卡的隐藏条件收紧：只有「从来没配过」（`not_connected` / `not_configured` / 历史字段 `no_credentials`）
+  才整块隐藏；**配了但失效**（key 无效、429 冷却、接口异常）留在面板上写明原因。
+  以前任何 `connected: false` 都藏，于是「有 key 但过期」也表现为卡凭空消失。
+
+测试 240 → 245。
+
+## 6.12.0
+
+### LithosAI 消费页签
+
+看板顶部多了一排页签：**用量**（原来那整页）/ **LithosAI 消费**。后者只在进入时才拉数据，
+没配 Cookie 的人切过去看到的是一条「还没配置」，不会吃一次失败。
+
+数据来自控制台的 `GET /api/billing/spend?start=&end=`（UTC 区间，含首尾）：
+
+- 四张卡：区间合计 / 今日（UTC）/ 日均（按有消费的天平摊）/ 预付余额
+- 每日消费·按模型：堆叠柱状图，悬停显示当天各模型金额与合计（和控制台自己的图一致）
+- 按模型表：消费、占比、输入、缓存命中（带命中占比）、输出、天数
+
+几个刻意的地方：
+
+- **口径写在界面上**：控制台按 UTC 切日、按纳美元记账，这是官方扣费；看板别处的
+  「估算费用」是按价格表算的，两者对不上是正常的——这句话直接印在表格下面，不藏在文档里。
+- 归一化在后端做：一条原始记录 = (天, 模型, API key)，后端聚成按天 / 按模型两种视图；
+  同一天同一模型有多个 key 时合并，天数按去重后的天算。
+- 余额与消费并行取，余额拿不到不影响消费显示（反之亦然）。
+- 页签选择记在 localStorage，下次打开还在原来那个。
+
+测试 236 → 240。
+
+## 6.11.2
+
+- Lithos 余额卡去掉「未绑卡」标签。它是支付方式的状态，不是当下的问题，平时挂着只是噪音。
+  冻结（onHold）照旧标——那个真的会让请求失败。
+
+## 6.11.1
+
+- 修：Lithos 余额卡显示「连不上 console.lithosai.cloud: fetch failed」。原因是直接用了
+  `globalThis.fetch`——App 主进程里的它被沙箱挡掉，报的是底层 undici 的 fetch failed。
+  改走宿主的 `ctx.network.fetch` 桥（DeepSeek 余额卡一直这么走），并把底层错误码一起显示出来。
+- 顺带纠正 6.11.0 的两处实测差异：`/api/me` 的活动组织字段是 `activeOrganization`；
+  只贴两串裸值时会按两种顺序各认一次，哪种返回 200 存哪种。
+
+## 6.11.0
+
+### LithosAI 余额（控制台会话）
+
+先搞清楚了一件事：**Lithos 的 API key 查不到余额**。公开 API 只有 `/v1/models` 与
+`/v1/chat/completions`，试过 `/v1/credits`、`/v1/balance`、`/v1/usage`、`/v1/me` 全 404。
+钱只在控制台里，而控制台的两个接口要登录态：`/api/me`（用户与活动组织）、
+`/api/billing`（`balanceNanos` / `hasCard` / `onHold`）。Lithos 文档原话：
+“Inference API keys cannot read console billing.”
+
+所以做法是：设置页里粘一行控制台 Cookie 请求头（`__Host-console_session` 与
+`__Host-console_csrf` 两个都要），我们替你去调那两个 GET。余额出现在功能面板的微卡上，
+没配就不占位；会话过期时卡片留着并写清楚怎么修。
+
+几个刻意的地方：
+
+- Cookie 只存本机 `dataDir/lithos-console.json`，权限 0600；只发那两个 cookie，多余的丢掉。
+- 金额单位是纳美元（1 USD = 1e9 nanos）；小于一分钱的非零余额写「低于 $0.01」，
+  不四舍五入成 `$0.00`——那会让人以为钱没了。
+- 401 一律报「会话过期，请重新粘」，不静默沿用旧数；网络失败与契约变更（没有
+  `balanceNanos`）各用各的 reason，不混成一个“查询失败”。
+- 60 秒缓存，功能面板的「刷新」能穿过（`?refresh=1`）。
+- 这是未公开契约。Lithos 改了就失效，所以不适合当唯一依据：控制台还是真相。
+- 实测修正：`/api/me` 里活动组织叫 `activeOrganization`（不是 CodexBar 文档写的 `organization`），
+  两种都收；少了它就拿不到 `X-Organization-Id`，账单接口会拒。
+- 只贴两串裸值（没带 cookie 名字）时，按两种顺序各认一次 `/api/me`，哪种返回 200 就存哪种：
+  这算实测不算猜，省掉“哪个是 session 哪个是 csrf”这类来回。
+
+出网白名单显式加了 `console.lithosai.cloud`（manifest 的全量断言同步改了，不静默扩权）。
+
+测试 222 → 234。
+
+## 6.10.0
+
+从上游 8.7.5 抄了两个东西，都是「口径/可查性」层面的事。
+
+### 命中率只剩一个口径
+
+以前 KPI 用 `缓存读 / 总 token`（分母带了输出），明细行用 `缓存读 / 输入`，两处对不上。
+现在式子收进 `ui/hit-rate.js`：命中率 = 缓存读 / 输入总量（含缓存读），不含输出。
+KPI 卡、明细行、SQL 排序三处各 import 同一份实现；turns 的排序表达式是 SQL 调不到 JS，
+公式在 `HIT_SORT_EXPR` 里拄了一遍，`test/hit-rate.test.js` 用同一批样本比对两边。
+
+实际影响：你现在的负载输出占比小，今日 96.8% → 97.1%（+0.3pt）；输出重的模型会拉开更多。
+
+### 明细行点得开：看得到这一轮会话的逐次调用
+
+新接口 `GET /turn?requestId=`：按 requestId 回归档（`usage-archive.jsonl`）定位会话，
+把这一轮所有调用按时间排开——每一次的模型、未命中输入、缓存读、输出、状态（ok/失败）、
+单位费用，点的那一条高亮。明细表里点一下行展开，再点跳到另一条。
+
+几个刻意的取舍：
+
+- 不读会话 JSONL（上游那套做法）：我们的记账单位是账本记录，一个会话在本地是按天切开的桶，
+  没有「用户一轮 → N 次 assistant 调用」这层结构。账本给一次请求一行，那就如实按行给。
+- 不查 turns 表当详情源：turns 只是索引，字段是压扁过的。详情只认归档。
+  归档找不到就直说找不到（可能已滑出窗口），不拼一个看起来完整的假详情。
+- 只为了能点开，给 conversations 增加了一个 `requestId` 字段（CACHE_VERSION 21→22，
+  会触发一次全量重扫）。传输给前端的副本会剥掉这个字段——最大的 Code 桶本来就贴着
+  900KB 的页预算，多 18 字节/条会把它顶出去。
+- 间隔 = 与上一次调用的起始时间差，含排队与工具往返，**不是耗时**；
+  账本里的 `durationMs` 实测恒为 0，就照实给 0，不拿间隔冒充。
+
+测试 211 → 221（新增命口径、SQL/JS 一致性、逐次调用复原、路由费用与 404）。
+
 ## 6.9.5
 
 - 执行者也能显示名字：宿主 `agent:list` 不列「子代理池」成员（`hana-artisan` / `luna` /
