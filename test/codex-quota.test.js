@@ -4,6 +4,7 @@ import {
   normalizeCodexCredentials,
   resolveCodexCredentials,
   sanitizeCodexUsage,
+  parseResetCredit,
   CodexQuotaService,
 } from "../lib/codex-quota.mjs";
 
@@ -69,6 +70,10 @@ test("sanitizeCodexUsage processes wham/usage rate limits and windows cleanly", 
     rate_limit_reset_credits: {
       available_count: 3,
     },
+    credits: {
+      has_credits: true,
+      balance: "$5.00",
+    },
   };
 
   const clean = sanitizeCodexUsage(sample);
@@ -81,6 +86,8 @@ test("sanitizeCodexUsage processes wham/usage rate limits and windows cleanly", 
   assert.equal(clean.secondary.usedPercent, 31);
   assert.equal(clean.secondary.remainingPercent, 69);
   assert.equal(clean.resetCredits, 3);
+  assert.equal(clean.creditsBalance, "$5.00");
+  assert.equal(clean.hasCredits, true);
 });
 
 test("CodexQuotaService uses in-memory cache and prevents redundant fetching", async () => {
@@ -134,4 +141,85 @@ test("CodexQuotaService handles 401 gracefully with quiet message", async () => 
   assert.equal(res.connected, false);
   assert.equal(res.reason, "unauthorized");
   assert.match(res.message, /失效/);
+});
+
+test("parseResetCredit parses and normalizes credit fields cleanly", () => {
+  assert.equal(parseResetCredit(null), null);
+  assert.equal(parseResetCredit({}), null);
+
+  const parsed = parseResetCredit({
+    id: "credit_123",
+    reset_type: "codex_rate_limits",
+    status: "available",
+    granted_at: "2026-06-01T00:00:00Z",
+    expires_at: "2026-09-01T00:00:00Z",
+    title: "限额重置卡 1",
+    description: "立即重置速率限制",
+  });
+  assert.equal(parsed.id, "credit_123");
+  assert.equal(parsed.status, "available");
+  assert.equal(parsed.expiresAt, "2026-09-01T00:00:00Z");
+  assert.equal(parsed.title, "限额重置卡 1");
+});
+
+test("CodexQuotaService getResetCredits and consumeResetCredit work with cache busting", async () => {
+  let postBody = null;
+  const mockBus = {
+    request: async () => ({ apiKey: "valid_key", accountId: "acc_test" }),
+  };
+  const mockFetch = async (url, init) => {
+    if (init?.method === "POST") {
+      postBody = JSON.parse(init.body);
+      if (postBody.credit_id === "credit_already_spent") {
+        return {
+          ok: false,
+          status: 400,
+          json: async () => ({ code: "already_redeemed" }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ code: "reset" }),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        credits: [
+          { id: "credit_1", status: "available", expires_at: "2026-11-01T00:00:00Z", title: "月度重置卡" },
+          { id: "credit_2", status: "redeemed", title: "已用卡" },
+        ],
+        available_count: 1,
+      }),
+    };
+  };
+
+  const service = new CodexQuotaService({
+    bus: mockBus,
+    fetchFn: mockFetch,
+    ttlMs: 5000,
+  });
+
+  const list = await service.getResetCredits();
+  assert.equal(list.connected, true);
+  assert.equal(list.availableCount, 1);
+  assert.equal(list.credits.length, 2);
+  assert.equal(list.credits[0].id, "credit_1");
+
+  // 失败分支（已核销）
+  const failRes = await service.consumeResetCredit({ creditId: "credit_already_spent" });
+  assert.equal(failRes.ok, false);
+  assert.equal(failRes.code, "already_redeemed");
+  assert.match(failRes.message, /使用过/);
+
+  // 成功分支
+  const succRes = await service.consumeResetCredit({ creditId: "credit_1" });
+  assert.equal(succRes.ok, true);
+  assert.equal(succRes.code, "reset");
+  assert.match(succRes.message, /成功/);
+  assert.equal(postBody.credit_id, "credit_1");
+  assert.equal(postBody.account_id, "acc_test");
+  assert.ok(postBody.redeem_request_id, "包含幂等请求 UUID");
 });

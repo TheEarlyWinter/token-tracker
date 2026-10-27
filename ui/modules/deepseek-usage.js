@@ -58,6 +58,19 @@ function shortModel(id) {
   return i >= 0 ? s.slice(i + 1) : s;
 }
 
+function matchModel(targetModel, selectedModel) {
+  if (!selectedModel) return true;
+  if (!targetModel) return false;
+  if (targetModel === selectedModel) return true;
+  const normSelected = selectedModel.includes("/") ? selectedModel.split("/").slice(1).join("/") : selectedModel;
+  const normTarget = targetModel.includes("/") ? targetModel.split("/").slice(1).join("/") : targetModel;
+  if (normSelected === normTarget) return true;
+  const leafSelected = selectedModel.split("/").pop();
+  const leafTarget = targetModel.split("/").pop();
+  if (leafSelected === leafTarget) return true;
+  return false;
+}
+
 // 平台只有按月接口，所以区间只能是「几个月」，不能切成 7 天这样的跨度。
 const RANGES = [
   { key: "month", label: "本月" },
@@ -65,7 +78,30 @@ const RANGES = [
   { key: "q3", label: "近 3 个月" },
 ];
 
-export function createDeepSeekUsage({ container, fetchFn, getColors = () => ({}) } = {}) {
+function dateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function naturalRange(key, now = new Date()) {
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  if (key === "last") {
+    return { key, from: dateKey(new Date(year, month - 1, 1)), to: dateKey(new Date(year, month, 0)) };
+  }
+  if (key === "q3") {
+    return { key, from: dateKey(new Date(year, month - 2, 1)), to: dateKey(now) };
+  }
+  return { key: key || "month", from: dateKey(new Date(year, month, 1)), to: dateKey(now) };
+}
+
+export function createDeepSeekUsage({
+  container,
+  fetchFn,
+  getColors = () => ({}),
+  getFilters = () => ({}),
+  onClearModel,
+  onSelectRange,
+} = {}) {
   if (!container) return null;
 
   const state = {
@@ -77,27 +113,79 @@ export function createDeepSeekUsage({ container, fetchFn, getColors = () => ({})
     loadedOnce: false,
     saving: false,
     saveError: null,
+    lastFrom: "",
+    lastTo: "",
+    pendingLoad: null,
   };
 
+  function dateFilterKey(filters) {
+    return `${filters?.from || ""}|${filters?.to || ""}`;
+  }
+
+  function queueLoad(force, range) {
+    state.pendingLoad = {
+      force: Boolean(force) || Boolean(state.pendingLoad?.force),
+      range: range || state.range,
+    };
+  }
+
   async function load(force = false, range = state.range) {
-    if (state.loading) return;
-    state.range = range;
+    if (state.loading) {
+      queueLoad(force, range);
+      return;
+    }
+    const filters = typeof getFilters === "function" ? getFilters() : {};
+    const explicitRangeSelection = range && typeof range === "object";
+    const selectedRange = explicitRangeSelection ? range : naturalRange(range || state.range);
+    state.range = selectedRange.key;
+    const requestedFilterKey = dateFilterKey(filters);
+    const requestFrom = !explicitRangeSelection && filters.from && filters.to ? filters.from : selectedRange.from;
+    const requestTo = !explicitRangeSelection && filters.from && filters.to ? filters.to : selectedRange.to;
     state.loading = true;
+    state.error = null;
+    state.lastFrom = filters.from || "";
+    state.lastTo = filters.to || "";
     render();
     try {
-      const params = new URLSearchParams({ range });
+      const params = new URLSearchParams();
       if (force) params.set("refresh", "1");
+      if (requestFrom && requestTo) {
+        params.set("start", requestFrom);
+        params.set("end", requestTo);
+      } else if (selectedRange.key) {
+        params.set("range", selectedRange.key);
+      }
       const res = await fetchFn("/deepseek-usage?" + params.toString());
       const data = await res.json();
-      state.data = data || null;
-      state.error = data?.connected === false ? data?.message || "拿不到官方用量" : null;
-      state.loadedOnce = true;
+      const filtersChanged = dateFilterKey(typeof getFilters === "function" ? getFilters() : {}) !== requestedFilterKey;
+      if (filtersChanged && !state.pendingLoad) queueLoad(false, state.range);
+      if (!filtersChanged && !state.pendingLoad) {
+        if (!res.ok) {
+          state.error = data?.message || data?.error || "HTTP " + res.status;
+          state.data = null;
+        } else {
+          state.data = data || null;
+          state.error = data?.connected === false ? data?.message || "拿不到官方用量" : null;
+        }
+        state.loadedOnce = true;
+      }
     } catch (e) {
-      state.error = e?.message || String(e);
-      state.data = null;
+      const filtersChanged = dateFilterKey(typeof getFilters === "function" ? getFilters() : {}) !== requestedFilterKey;
+      if (filtersChanged && !state.pendingLoad) queueLoad(false, state.range);
+      if (!filtersChanged && !state.pendingLoad) {
+        state.error = e?.message || String(e);
+        state.data = null;
+        state.loadedOnce = true;
+      }
     } finally {
       state.loading = false;
-      render();
+      const pending = state.pendingLoad;
+      state.pendingLoad = null;
+      if (pending) {
+        void load(pending.force, pending.range);
+      } else {
+        render();
+      }
     }
   }
 
@@ -144,7 +232,7 @@ export function createDeepSeekUsage({ container, fetchFn, getColors = () => ({})
     }));
   }
 
-  function renderChart(data) {
+  function renderChart(data, chartModels) {
     const canvas = container.querySelector("#ds-usage-chart");
     if (!canvas || typeof Chart === "undefined") return;
     if (state.chart) {
@@ -155,7 +243,7 @@ export function createDeepSeekUsage({ container, fetchFn, getColors = () => ({})
     }
     const colors = getColors() || {};
     const days = data.days || [];
-    const models = (data.models || []).slice(0, 8);
+    const models = (chartModels || []).slice(0, 8);
     const labels = days.map((d) => shortDate(d.day));
 
     state.chart = new Chart(canvas, {
@@ -283,13 +371,96 @@ export function createDeepSeekUsage({ container, fetchFn, getColors = () => ({})
       return;
     }
 
-    const days = data?.days || [];
-    const models = data?.models || [];
-    const total = data?.totalCost || 0;
-    const today = days.length ? days[days.length - 1] : null;
+    const filters = typeof getFilters === "function" ? getFilters() : {};
+    const selModel = (filters.model || "").trim();
+    const from = filters.from || "";
+    const to = filters.to || "";
+
+    // Client-side date slicing: filter days by from/to
+    let rawDays = data?.days || [];
+    if (from || to) {
+      rawDays = rawDays.filter((d) => (!from || d.day >= from) && (!to || d.day <= to));
+    }
+    const days = rawDays;
+
+    // Filter models and aggregate for sliced days
+    let models = [];
+    if (from || to) {
+      const modelMap = new Map();
+      for (const d of days) {
+        for (const [mName, mData] of Object.entries(d.byModel || {})) {
+          if (selModel && !matchModel(mName, selModel)) continue;
+          const cur = modelMap.get(mName) || {
+            model: mName,
+            cost: 0,
+            hitTokens: 0,
+            missTokens: 0,
+            outputTokens: 0,
+            tokens: 0,
+            requests: 0,
+            days: new Set(),
+          };
+          cur.cost += mData.costRaw ?? mData.cost ?? 0;
+          cur.tokens += mData.tokens || 0;
+          cur.hitTokens += mData.hitTokens || 0;
+          cur.missTokens += mData.missTokens || 0;
+          cur.outputTokens += mData.outputTokens || 0;
+          cur.requests += mData.requests || 0;
+          cur.days.add(d.day);
+          modelMap.set(mName, cur);
+        }
+      }
+      const totalCost = [...modelMap.values()].reduce((sum, m) => sum + m.cost, 0);
+      models = [...modelMap.values()]
+        .map((m) => ({
+          model: m.model,
+          cost: Number(m.cost.toFixed(4)),
+          costDisplay: `¥${m.cost.toFixed(2)}`,
+          hitTokens: m.hitTokens,
+          missTokens: m.missTokens,
+          outputTokens: m.outputTokens,
+          tokens: m.tokens,
+          requests: m.requests,
+          hitRate: m.hitTokens + m.missTokens > 0 ? m.hitTokens / (m.hitTokens + m.missTokens) : null,
+          days: m.days.size,
+          share: totalCost > 0 ? m.cost / totalCost : 0,
+        }))
+        .filter((m) => m.tokens > 0 || m.cost > 0 || m.requests > 0)
+        .sort((a, b) => b.cost - a.cost);
+    } else {
+      const allModels = data?.models || [];
+      models = selModel
+        ? allModels.filter((m) => matchModel(m.model, selModel))
+        : allModels;
+    }
+
+    const total = models.reduce((sum, m) => sum + (Number(m.cost) || 0), 0);
+    const totalTokens = models.reduce(
+      (sum, m) => sum + (Number(m.hitTokens || 0) + Number(m.missTokens || 0) + Number(m.outputTokens || 0)),
+      0
+    );
+    const totalHit = models.reduce((sum, m) => sum + Number(m.hitTokens || 0), 0);
+    const totalMiss = models.reduce((sum, m) => sum + Number(m.missTokens || 0), 0);
+    const hitRate = totalHit + totalMiss > 0 ? totalHit / (totalHit + totalMiss) : null;
+
+    const isSingleDay = from && to && from === to;
+    const todayKey = dateKey(new Date());
+    const metricDay = isSingleDay ? from : todayKey;
+    const todayRecord = days.find((day) => day.day === metricDay);
+    const todayCost = todayRecord
+      ? models.reduce((sum, m) => sum + (Number(todayRecord.byModel?.[m.model]?.cost) || 0), 0)
+      : 0;
+
     const balance = data?.balance;
-    const ranged = (data?.months || []).length ? (data.months.length === 1 ? data.months[0] : `${data.months[0]} – ${data.months[data.months.length - 1]}`) : "";
-    const rangeLabel = RANGES.find((r) => r.key === (data?.range || state.range))?.label || "";
+    const ranged = (from && to)
+      ? (from === to ? from : `${from} – ${to}`)
+      : (data?.start && data?.end
+          ? (data.start === data.end ? data.start : `${data.start} – ${data.end}`)
+          : ((data?.months || []).length
+              ? (data.months.length === 1 ? data.months[0] : `${data.months[0]} – ${data.months[data.months.length - 1]}`)
+              : ""));
+    const activeRangeKey = (from || to) ? "" : (data?.range || state.range);
+    const rangeLabel = RANGES.find((r) => r.key === activeRangeKey)?.label || "";
 
     const rowsHtml = models.length
       ? models
@@ -306,7 +477,7 @@ export function createDeepSeekUsage({ container, fetchFn, getColors = () => ({})
               </tr>`
           )
           .join("")
-      : `<tr><td colspan="7" class="ls-empty-row">这个区间没有用量记录</td></tr>`;
+      : `<tr><td colspan="7" class="ls-empty-row">${selModel ? "该模型在当前区间没有用量记录" : "这个区间没有用量记录"}</td></tr>`;
 
     container.innerHTML = `
       <div class="ls-wrap">
@@ -314,10 +485,11 @@ export function createDeepSeekUsage({ container, fetchFn, getColors = () => ({})
           <div class="ls-head-left">
             <span class="ls-title">DeepSeek 官方用量</span>
             <span class="ls-sub">${esc(ranged)}${rangeLabel ? " · " + esc(rangeLabel) : ""}</span>
+            ${selModel ? `<span class="ls-filter-badge">已筛选模型: ${esc(shortModel(selModel))} <button type="button" class="ls-filter-clear" title="清除模型筛选">✕</button></span>` : ""}
           </div>
           <div class="ls-head-right">
             <div class="ds-range">${RANGES.map(
-              (r) => `<button type="button" class="ds-range-btn${r.key === (data?.range || state.range) ? " on" : ""}" data-range="${r.key}">${r.label}</button>`
+              (r) => `<button type="button" class="ds-range-btn${r.key === activeRangeKey ? " on" : ""}" data-range="${r.key}">${r.label}</button>`
             ).join("")}</div>
             <span class="ls-updated">${state.loading ? "刷新中…" : data?.updatedAt ? "更新于 " + new Date(data.updatedAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }) : ""}</span>
             <button type="button" class="btn btn-outline ls-refresh">刷新</button>
@@ -326,8 +498,8 @@ export function createDeepSeekUsage({ container, fetchFn, getColors = () => ({})
 
         <div class="ls-cards">
           <div class="ls-card"><div class="ls-k">区间消费</div><div class="ls-v">${esc(money(total))}</div><div class="ls-hint">${days.length} 天有记录</div></div>
-          <div class="ls-card"><div class="ls-k">今日</div><div class="ls-v">${esc(money(today?.cost || 0))}</div><div class="ls-hint">${esc(shortDate(today?.day))}</div></div>
-          <div class="ls-card"><div class="ls-k">区间 Token</div><div class="ls-v">${fmtTokens(data?.tokens || 0)}</div><div class="ls-hint">缓存命中 ${pct(data?.hitRate)}</div></div>
+          <div class="ls-card"><div class="ls-k">${isSingleDay ? "当日" : "今日"}</div><div class="ls-v">${esc(money(todayCost))}</div><div class="ls-hint">${esc(shortDate(metricDay))}</div></div>
+          <div class="ls-card"><div class="ls-k">区间 Token</div><div class="ls-v">${fmtTokens(totalTokens)}</div><div class="ls-hint">缓存命中 ${pct(hitRate)}</div></div>
           <div class="ls-card"><div class="ls-k">官方余额</div><div class="ls-v">${esc(balance?.connected ? balance.balanceDisplay || "—" : "—")}</div><div class="ls-hint">${esc(balance?.connected ? `可用约 ${fmtTokens(balance.tokenEstimation || 0)} tokens` : balance?.message || "")}</div></div>
         </div>
 
@@ -365,17 +537,48 @@ export function createDeepSeekUsage({ container, fetchFn, getColors = () => ({})
 
     const btn = container.querySelector(".ls-refresh");
     if (btn) btn.onclick = () => load(true);
-    for (const chip of container.querySelectorAll("[data-range]")) {
-      chip.onclick = () => load(true, chip.getAttribute("data-range"));
+    const clearBtn = container.querySelector(".ls-filter-clear");
+    if (clearBtn && typeof onClearModel === "function") {
+      clearBtn.onclick = () => onClearModel();
     }
-    renderChart(data);
+    for (const chip of container.querySelectorAll("[data-range]")) {
+      chip.onclick = () => {
+        const selected = naturalRange(chip.getAttribute("data-range"));
+        if (typeof onSelectRange === "function") {
+          onSelectRange(selected);
+          return;
+        }
+        state.lastFrom = "";
+        state.lastTo = "";
+        load(true, selected);
+      };
+    }
+    renderChart({ days }, models);
   }
 
   container.innerHTML = `<div class="ls-empty">正在准备 DeepSeek 官方用量视图…</div>`;
   return {
     ensure: () => {
-      if (!state.loadedOnce && !state.loading) load(false);
-      else render();
+      const filters = typeof getFilters === "function" ? getFilters() : {};
+      const from = filters.from || "";
+      const to = filters.to || "";
+      if (!state.loadedOnce && !state.loading) {
+        load(false);
+      } else if (from !== state.lastFrom || to !== state.lastTo) {
+        load(false);
+      } else {
+        render();
+      }
+    },
+    reloadWithFilters: () => {
+      const filters = typeof getFilters === "function" ? getFilters() : {};
+      const from = filters.from || "";
+      const to = filters.to || "";
+      if (from !== state.lastFrom || to !== state.lastTo) {
+        load(false);
+      } else {
+        render();
+      }
     },
     reload: (force = true) => load(force),
     destroy: () => {

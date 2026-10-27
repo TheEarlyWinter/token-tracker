@@ -6,6 +6,7 @@ import { openTurnsStore } from "./services/turns-store.js";
 import { openSessionSourceStore } from "./services/session-sources.js";
 import { loadLedger } from "./services/ledger-source.js";
 import { loadAgentNames } from "./services/agent-names.js";
+import { appTimeZone } from "./services/platform.js";
 import { normalizeEntryForArchive } from "../../lib/ledger-normalization.mjs";
 export { normalizeEntryForArchive } from "../../lib/ledger-normalization.mjs";
 
@@ -14,18 +15,17 @@ const ARCHIVE_FILE = "usage-archive.json";
 const SESSION_SOURCES_FILE = "session-sources.json";
 const MAX_CANDIDATES = 64;
 const MAX_SOURCE_ENTRIES = 256;
-// turns 派生索引键版本：session_key 必须等于聚合缓存桶键。
-const TURNS_INDEX_KEY = "bucket-v1";
+// turns 派生索引键版本：session_key、日期及时序字段都必须与当前聚合口径一致。
+const TURNS_INDEX_KEY = `bucket-v2:${appTimeZone}`;
 const MAX_PENDING_SOURCES = 256;
 const MAX_NAMESPACE_LENGTH = 64;
-const CACHE_VERSION = 22;
+const CACHE_VERSION = 23;
 const MAX_LEDGER_LIMIT = 20000;
 // 子代理记录如果拿不到执行者身份，单独归集，不静默计入委托方。
 // 宿主 `usage:list` 的投影不含 attribution.childAgentId / source.actor，
 // 所以新记录只能靠 scripts/backfill-actor-from-ledger.mjs 从官方账本补写。
 const UNKNOWN_ACTOR = "sub:unknown";
 
-const appTimeZone = process.env.TOKEN_TRACKER_FORCE_TZ || "Asia/Shanghai";
 const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: appTimeZone });
 const hourFmt = new Intl.DateTimeFormat("en-CA", { timeZone: appTimeZone, hour: "2-digit", hour12: false });
 const noop = () => {};
@@ -69,12 +69,17 @@ function addRecordToBucket(bucket, record, day, hour) {
   const actorId = baseType === "sub" ? (record.actorAgentId || UNKNOWN_ACTOR) : ownerId;
   const parentId = baseType === "sub" ? (record.parentAgentId || ownerId) : null;
   const ts = record.startedAt || record.endedAt || "";
-  const input = record.inputTokens || 0;
-  const inputUncached = record.inputUncachedTokens ?? input;
+  // 对外 input/inTokens 统一表示未命中输入；inputTokens 仍只在归档中保留原始总输入。
+  const rawInput = record.inputTokens ?? 0;
+  const input = record.inputUncachedTokens ?? rawInput;
+  const inputUncached = input;
   const output = record.outputTokens || 0;
   const cacheRead = record.cacheReadTokens || 0;
   const cacheWrite = record.cacheWriteTokens || 0;
-  const total = record.totalTokens || (input + output + cacheRead);
+  // 老归档可能没有 totalTokens：若只有 raw inputTokens，它本身已含 cacheRead，不能重复相加。
+  const total = record.totalTokens != null
+    ? record.totalTokens
+    : (record.inputUncachedTokens != null ? input + cacheRead + output : rawInput + output);
   const cost = record.costTotal || 0;
 
   if (!bucket.firstTime) bucket.firstTime = ts;
@@ -170,7 +175,8 @@ function addRecordToBucket(bucket, record, day, hour) {
   if (!bucket.hourlyBreakdown[day][hour]) {
     bucket.hourlyBreakdown[day][hour] = {
       ...emptyTypeTotals(),
-      cacheRead: 0, cacheWrite: 0, assistantCount: 0, models: {}, providerTotals: {}, actors: {},
+      input: 0, inputUncached: 0, output: 0, cacheRead: 0, cacheWrite: 0,
+      assistantCount: 0, models: {}, providerTotals: {}, actors: {},
     };
   }
   const hourly = bucket.hourlyBreakdown[day][hour];
@@ -178,14 +184,20 @@ function addRecordToBucket(bucket, record, day, hour) {
   hourly.totalTokens += total;
   if (hourly[type] !== undefined) hourly[type] += total;
   else hourly[type] = total;
+  hourly.input += input;
+  hourly.inputUncached += inputUncached;
+  hourly.output += output;
   hourly.cacheRead += cacheRead;
   hourly.cacheWrite += cacheWrite;
   hourly.assistantCount++;
   if (!hourly.models[model]) {
-    hourly.models[model] = { ...emptyTypeTotals(), cacheRead: 0, cacheWrite: 0, assistantCount: 0 };
+    hourly.models[model] = { ...emptyTypeTotals(), input: 0, inputUncached: 0, output: 0, cacheRead: 0, cacheWrite: 0, assistantCount: 0 };
   }
   const hourlyModel = hourly.models[model];
   hourlyModel.totalTokens += total;
+  hourlyModel.input += input;
+  hourlyModel.inputUncached += inputUncached;
+  hourlyModel.output += output;
   hourlyModel.cacheRead += cacheRead;
   hourlyModel.cacheWrite += cacheWrite;
   hourlyModel.assistantCount++;
@@ -193,10 +205,13 @@ function addRecordToBucket(bucket, record, day, hour) {
   if (provider) {
     const providerKey = `${provider}/${model}`;
     if (!hourly.providerTotals[providerKey]) {
-      hourly.providerTotals[providerKey] = { ...emptyTypeTotals(), cacheRead: 0, cacheWrite: 0, assistantCount: 0 };
+      hourly.providerTotals[providerKey] = { ...emptyTypeTotals(), input: 0, inputUncached: 0, output: 0, cacheRead: 0, cacheWrite: 0, assistantCount: 0 };
     }
     const stats = hourly.providerTotals[providerKey];
     stats.totalTokens += total;
+    stats.input += input;
+    stats.inputUncached += inputUncached;
+    stats.output += output;
     stats.cacheRead += cacheRead;
     stats.cacheWrite += cacheWrite;
     stats.assistantCount++;
@@ -209,7 +224,7 @@ function accumulateActor(container, { actorId, parentId, baseType, model, provid
   if (!container.actors[actorId]) {
     container.actors[actorId] = {
       totalTokens: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0,
-      assistantCount: 0, delegatedTokens: 0, byParent: {}, models: {},
+      assistantCount: 0, delegatedTokens: 0, byParent: {}, models: {}, providerTotals: {},
     };
   }
   const actor = container.actors[actorId];
@@ -234,6 +249,24 @@ function accumulateActor(container, { actorId, parentId, baseType, model, provid
   actorModel.cacheRead += cacheRead;
   actorModel.cacheWrite += cacheWrite;
   actorModel.assistantCount++;
+
+  if (provider) {
+    const providerKey = `${provider}/${model}`;
+    if (!actor.providerTotals[providerKey]) {
+      actor.providerTotals[providerKey] = {
+        provider, model, input: 0, output: 0, cacheRead: 0, cacheWrite: 0,
+        totalTokens: 0, assistantCount: 0, subTokens: 0,
+      };
+    }
+    const actorProvider = actor.providerTotals[providerKey];
+    actorProvider.input += input;
+    actorProvider.output += output;
+    actorProvider.cacheRead += cacheRead;
+    actorProvider.cacheWrite += cacheWrite;
+    actorProvider.totalTokens += total;
+    actorProvider.assistantCount++;
+    if (baseType === "sub") actorProvider.subTokens += total;
+  }
 }
 
 // 单条会话记录在 RPC 页里的预算（留出信封余量，宿主单条上限 1MB）。
@@ -507,6 +540,35 @@ export class LedgerEngine {
     return false;
   }
 
+  cachedArchiveCount(data = this.data) {
+    let count = 0;
+    for (const session of Object.values(data?.sessions || {})) {
+      const declared = Number(session?.msgCount);
+      const conversations = Array.isArray(session?.conversations) ? session.conversations.length : 0;
+      if (Number.isFinite(declared) && declared >= 0) count += Math.max(declared, conversations);
+      else count += conversations;
+    }
+    return count;
+  }
+
+  archiveConsistencyError() {
+    const readError = this.archiveStore.readError;
+    if (readError) {
+      return Object.assign(new Error("用量归档读取失败，保留上次成功快照"), {
+        code: "ARCHIVE_READ_FAILED",
+        cause: readError,
+      });
+    }
+    const skipped = Number(this.archiveStore.skipped) || 0;
+    if (skipped > 0 && this.cachedArchiveCount() > this.archiveStore.size()) {
+      return Object.assign(new Error("用量归档存在损坏记录，拒绝缩减历史快照"), {
+        code: "ARCHIVE_INCOMPLETE",
+        cause: { skipped, cached: this.cachedArchiveCount(), readable: this.archiveStore.size() },
+      });
+    }
+    return null;
+  }
+
   // 归档记录的目标类型：已确认 namespace=code 时归 code，否则保留归档时的 baseType。
   resolveRecordType(record) {
     const baseType = record.baseType || (record.type === "code" ? "desktop" : record.type) || "desktop";
@@ -686,7 +748,11 @@ export class LedgerEngine {
     if (!raw || raw.status !== "ok" || !raw.usage || typeof raw.requestId !== "string" || !raw.requestId) {
       return { accepted: false, reason: "invalid_entry" };
     }
-    if (this.archiveStore.entries[raw.requestId]) return { accepted: false, reason: "duplicate" };
+    if (this.archiveStore.entries[raw.requestId]) {
+      // appendPending 失败后 rid 已在内存中；同事件重试必须先补写 pending，不能把未落盘当成成功 duplicate。
+      this.archiveStore.appendPending();
+      return { accepted: false, reason: "duplicate" };
+    }
     const record = normalizeEntryForArchive(raw, { namespace: this.sourceStore.get(raw.attribution?.sessionId) });
     const key = this.indexRecord(record);
     this.archiveStore.entries[raw.requestId] = record;
@@ -736,6 +802,8 @@ export class LedgerEngine {
       entries = loaded.entries;
     }
     if (!Array.isArray(entries)) entries = [];
+    const archiveError = this.archiveConsistencyError();
+    if (archiveError) throw archiveError;
     // 屏障必须先落盘：失败则本轮不修改任何持久数据。
     this.beginAggregateWrite();
     const force = options.force === true;
@@ -816,9 +884,15 @@ export class LedgerEngine {
     this.cacheStore.saveMeta(cache);
     this.applyTurns(cache, { fullRebuild, dirty });
     const committed = this.finalizeAggregateWrite(cache);
+    if (!committed) {
+      // 屏障未清除就不是成功扫描：保留 beginAggregateWrite 的旧快照与 pending，下一轮必须全量重建。
+      this.data = previous;
+      this.needsFullRebuild = true;
+      throw Object.assign(new Error("扫描结果未完成持久化"), { code: "AGGREGATE_WRITE_FAILED" });
+    }
     this.data = cache;
     this.ready = true;
-    if (committed) this.needsFullRebuild = false;
+    this.needsFullRebuild = false;
     this.dirtyBuckets.clear();
     this.revision++;
     this.log.info?.(`[token-tracker] ledger scan: ${entries.length} window entries, ${newArchivedCount} newly archived, ${this.archiveStore.size()} total history.`);

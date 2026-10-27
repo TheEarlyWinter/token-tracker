@@ -6,7 +6,7 @@ export function initFilterDropdowns({ onSelect } = {}) {
     document.querySelectorAll(".cs.open").forEach((c) => {
       if (c !== cs) c.classList.remove("open");
     });
-    if (!cs) return;
+    if (!cs || (typeof cs.classList?.contains === "function" && cs.classList.contains("cs-disabled-billing"))) return;
     e.stopPropagation();
     cs.classList.toggle("open");
 

@@ -45,6 +45,13 @@ export function openArchiveStore(jsonPath, log = null) {
   const patched = new Set();           // 需要重写已有行的 rid
   let updatedAt = null;
   let persistedUpdatedAt = null;
+  let readError = null;
+  let skipped = 0;
+
+  function noteReadError(error) {
+    if (readError) return;
+    readError = { code: error?.code || "ARCHIVE_READ_FAILED", message: error?.message || String(error) };
+  }
 
   // 一次性迁移：日志还不存在但旧单文件在 → 生成日志（migrateLegacy 内会改名留底）。
   if (!fs.existsSync(journalPath) && fs.existsSync(jsonPath)) migrateLegacy();
@@ -74,6 +81,7 @@ export function openArchiveStore(jsonPath, log = null) {
     try {
       legacy = JSON.parse(readTextFile(jsonPath));
     } catch (e) {
+      noteReadError(e);
       log.warn("[token-tracker] archive 旧文件解析失败，保留原文件不迁移：", e.message);
       return false;
     }
@@ -87,6 +95,7 @@ export function openArchiveStore(jsonPath, log = null) {
     try {
       appendJsonLines(journalPath, fresh);
     } catch (e) {
+      noteReadError(e);
       log.warn("[token-tracker] archive 旧文件并入日志失败，保留原文件：", e.message);
       return false;
     }
@@ -100,9 +109,9 @@ export function openArchiveStore(jsonPath, log = null) {
     try {
       legacy = JSON.parse(readTextFile(jsonPath));
     } catch (e) {
-      // 损坏：留档待人工恢复，本次以空归档启动，下次扫描从账本重新播种。
+      // 损坏：原位留档待人工恢复；每次启动都必须继续识别，不能让已有快照被缩减。
+      noteReadError(e);
       log.warn("[token-tracker] archive parse failed:", jsonPath, e.message);
-      try { fs.renameSync(jsonPath, jsonPath + ".corrupt-" + Date.now()); } catch {}
       return;
     }
     const src = legacy && legacy.entries && typeof legacy.entries === "object" ? legacy.entries : {};
@@ -120,6 +129,7 @@ export function openArchiveStore(jsonPath, log = null) {
       } finally { fs.closeSync(fd); }
       fs.renameSync(tmp, journalPath); // 原子落地：要么没有日志，要么整份都在
     } catch (e) {
+      noteReadError(e);
       log.warn("[token-tracker] archive 迁移失败（下次重试）：", e.message);
       try { fs.rmSync(tmp, { force: true }); } catch {}
       return;
@@ -131,7 +141,13 @@ export function openArchiveStore(jsonPath, log = null) {
   function loadJournal() {
     let res;
     try { res = readJsonLines(journalPath); }
-    catch (e) { if (e && e.code !== "ENOENT") log.warn("[token-tracker] archive journal read failed:", e.code || "", e.message); return; }
+    catch (e) {
+      if (e && e.code !== "ENOENT") {
+        noteReadError(e);
+        log.warn("[token-tracker] archive journal read failed:", e.code || "", e.message);
+      }
+      return;
+    }
     for (const rec of res.records) {
       if (!rec) continue;
       if (rec.meta) { if (rec.updatedAt) { updatedAt = rec.updatedAt; persistedUpdatedAt = rec.updatedAt; } continue; }
@@ -141,7 +157,10 @@ export function openArchiveStore(jsonPath, log = null) {
       entries[rec.rid] = rec.v; // 同 rid 后写覆盖
       written.add(rec.rid);
     }
-    if (res.skipped) log.warn("[token-tracker] archive journal 跳过 " + res.skipped + " 行损坏记录（中断写入残留，已忽略）");
+    if (res.skipped) {
+      skipped += res.skipped;
+      log.warn("[token-tracker] archive journal 跳过 " + res.skipped + " 行损坏记录（中断写入残留，已忽略）");
+    }
   }
 
   // 把内存里还没落盘的条目标追加进日志；返回 { rows, bytes }。
@@ -181,6 +200,9 @@ export function openArchiveStore(jsonPath, log = null) {
     set updatedAt(v) { updatedAt = v; },
     appendPending,
     patch,
+    get readError() { return readError; },
+    get skipped() { return skipped; },
+    diagnostics: () => ({ readError, skipped, readableEntries: Object.keys(entries).length }),
     size: () => Object.keys(entries).length,
   };
 }

@@ -49,7 +49,26 @@ function shortModel(id) {
   return i >= 0 ? s.slice(i + 1) : s;
 }
 
-export function createLithosSpend({ container, fetchFn, getColors = () => ({}) } = {}) {
+function matchModel(targetModel, selectedModel) {
+  if (!selectedModel) return true;
+  if (!targetModel) return false;
+  if (targetModel === selectedModel) return true;
+  const normSelected = selectedModel.includes("/") ? selectedModel.split("/").slice(1).join("/") : selectedModel;
+  const normTarget = targetModel.includes("/") ? targetModel.split("/").slice(1).join("/") : targetModel;
+  if (normSelected === normTarget) return true;
+  const leafSelected = selectedModel.split("/").pop();
+  const leafTarget = targetModel.split("/").pop();
+  if (leafSelected === leafTarget) return true;
+  return false;
+}
+
+export function createLithosSpend({
+  container,
+  fetchFn,
+  getColors = () => ({}),
+  getFilters = () => ({}),
+  onClearModel,
+} = {}) {
   if (!container) return null;
 
   const state = {
@@ -59,31 +78,77 @@ export function createLithosSpend({ container, fetchFn, getColors = () => ({}) }
     balance: null,
     chart: null,
     loadedOnce: false,
+    lastFrom: "",
+    lastTo: "",
+    pendingLoad: null,
   };
 
+  function dateFilterKey(filters) {
+    return `${filters?.from || ""}|${filters?.to || ""}`;
+  }
+
+  function queueLoad(force) {
+    state.pendingLoad = {
+      force: Boolean(force) || Boolean(state.pendingLoad?.force),
+    };
+  }
+
   async function load(force = false) {
-    if (state.loading) return;
+    if (state.loading) {
+      queueLoad(force);
+      return;
+    }
+    const filters = typeof getFilters === "function" ? getFilters() : {};
+    const requestedFilterKey = dateFilterKey(filters);
     state.loading = true;
+    state.error = null;
+    state.lastFrom = filters.from || "";
+    state.lastTo = filters.to || "";
     render();
     try {
-      const q = force ? "?refresh=1" : "";
+      const params = new URLSearchParams();
+      if (force) params.set("refresh", "1");
+      if (filters.from && filters.to) {
+        params.set("start", filters.from);
+        params.set("end", filters.to);
+      }
+      const q = params.toString() ? "?" + params.toString() : "";
+      const bq = force ? "?refresh=1" : "";
       const [spendRes, balanceRes] = await Promise.all([
         fetchFn("/lithos-spend" + q),
-        fetchFn("/lithos-balance" + q),
+        fetchFn("/lithos-balance" + bq),
       ]);
       const spend = await spendRes.json();
       const balance = await balanceRes.json();
-      if (!spend || spend.ok === false && !spend.reason) throw new Error(spend?.message || "消费数据无法识别");
-      state.spend = spend;
-      state.balance = balance;
-      state.error = spend?.connected === false ? spend?.message || "拿不到消费数据" : null;
-      state.loadedOnce = true;
+      const filtersChanged = dateFilterKey(typeof getFilters === "function" ? getFilters() : {}) !== requestedFilterKey;
+      if (filtersChanged && !state.pendingLoad) queueLoad(false);
+      if (!filtersChanged && !state.pendingLoad) {
+        if (!spendRes.ok) throw new Error(spend?.message || spend?.error || "HTTP " + spendRes.status);
+        if (!balanceRes.ok) throw new Error(balance?.message || balance?.error || "HTTP " + balanceRes.status);
+        if (!spend || (spend.ok === false && !spend.reason)) throw new Error(spend?.message || "消费数据无法识别");
+        state.spend = spend;
+        state.balance = balance;
+        state.error = spend?.connected === false ? spend?.message || "拿不到消费数据" : null;
+        state.loadedOnce = true;
+      }
     } catch (e) {
-      state.error = e?.message || String(e);
-      state.spend = null;
+      const filtersChanged = dateFilterKey(typeof getFilters === "function" ? getFilters() : {}) !== requestedFilterKey;
+      if (filtersChanged && !state.pendingLoad) queueLoad(false);
+      if (!filtersChanged && !state.pendingLoad) {
+        state.error = e?.message || String(e);
+        state.spend = null;
+        state.balance = null;
+        state.loadedOnce = true;
+      }
     } finally {
       state.loading = false;
-      render();
+      const pending = state.pendingLoad;
+      state.pendingLoad = null;
+      if (pending) {
+        void load(pending.force);
+      } else {
+        render();
+      }
     }
   }
 
@@ -102,13 +167,13 @@ export function createLithosSpend({ container, fetchFn, getColors = () => ({}) }
     }));
   }
 
-  function renderChart(spend) {
+  function renderChart(spend, chartModels) {
     const canvas = container.querySelector("#lithos-spend-chart");
     if (!canvas || typeof Chart === "undefined") return;
     if (state.chart) { try { state.chart.destroy(); } catch {} state.chart = null; }
     const colors = getColors() || {};
     const days = spend.days || [];
-    const models = (spend.models || []).slice(0, 8); // 图例最多 8 个，再多就不适合看了
+    const models = (chartModels || []).slice(0, 8); // 图例最多 8 个，再多就不适合看了
     const labels = days.map((d) => shortDate(d.day));
 
     state.chart = new Chart(canvas, {
@@ -177,10 +242,23 @@ export function createLithosSpend({ container, fetchFn, getColors = () => ({}) }
       return;
     }
 
+    const filters = typeof getFilters === "function" ? getFilters() : {};
+    const selModel = (filters.model || "").trim();
+
+    const allModels = spend?.models || [];
+    const models = selModel
+      ? allModels.filter((m) => matchModel(m.modelId, selModel))
+      : allModels;
+
     const days = spend?.days || [];
-    const models = spend?.models || [];
-    const total = spend?.totalUsd || 0;
-    const today = days.length ? days[days.length - 1] : null;
+    const total = selModel
+      ? models.reduce((sum, m) => sum + (Number(m.usd) || 0), 0)
+      : (spend?.totalUsd || 0);
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const todayRecord = days.find((day) => day.day === todayKey);
+    const today = todayRecord
+      ? (selModel ? models.reduce((sum, m) => sum + (Number((todayRecord.byModel || {})[m.modelId]) || 0), 0) : (todayRecord.usd || 0))
+      : 0;
     const avg = days.length ? total / days.length : 0;
     const ranged = spend?.start && spend?.end ? `${shortDate(spend.start)} – ${shortDate(spend.end)} UTC` : "";
     const balanceText = balance?.connected ? balance.display : "—";
@@ -201,14 +279,15 @@ export function createLithosSpend({ container, fetchFn, getColors = () => ({}) }
               </tr>`;
           })
           .join("")
-      : `<tr><td colspan="7" class="ls-empty-row">这个区间没有消费记录</td></tr>`;
+      : `<tr><td colspan="7" class="ls-empty-row">${selModel ? "该模型在当前区间没有消费记录" : "这个区间没有消费记录"}</td></tr>`;
 
     container.innerHTML = `
       <div class="ls-wrap">
         <div class="ls-head">
           <div class="ls-head-left">
-            <span class="ls-title">LithosAI 本月消费</span>
+            <span class="ls-title">LithosAI 消费</span>
             <span class="ls-sub">${esc(ranged)}</span>
+            ${selModel ? `<span class="ls-filter-badge">已筛选模型: ${esc(shortModel(selModel))} <button type="button" class="ls-filter-clear" title="清除模型筛选">✕</button></span>` : ""}
           </div>
           <div class="ls-head-right">
             <span class="ls-updated">${state.loading ? "刷新中…" : spend?.updatedAt ? "更新于 " + new Date(spend.updatedAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }) : ""}</span>
@@ -218,7 +297,7 @@ export function createLithosSpend({ container, fetchFn, getColors = () => ({}) }
 
         <div class="ls-cards">
           <div class="ls-card"><div class="ls-k">区间合计</div><div class="ls-v">${esc(money(total))}</div><div class="ls-hint">${days.length} 天有记录</div></div>
-          <div class="ls-card"><div class="ls-k">今日（UTC）</div><div class="ls-v">${esc(money(today?.usd || 0))}</div><div class="ls-hint">${esc(shortDate(today?.day))}</div></div>
+          <div class="ls-card"><div class="ls-k">今日（UTC）</div><div class="ls-v">${esc(money(today))}</div><div class="ls-hint">${esc(shortDate(todayKey))}</div></div>
           <div class="ls-card"><div class="ls-k">日均</div><div class="ls-v">${esc(money(avg))}</div><div class="ls-hint">按有消费的天数平摊</div></div>
           <div class="ls-card"><div class="ls-k">预付余额</div><div class="ls-v">${esc(balanceText)}</div><div class="ls-hint">${balance?.connected ? esc(balance.organization?.name || "") : esc(balance?.message || "")}</div></div>
         </div>
@@ -256,18 +335,36 @@ export function createLithosSpend({ container, fetchFn, getColors = () => ({}) }
 
     const btn = container.querySelector(".ls-refresh");
     if (btn) btn.onclick = () => load(true);
-    renderChart(spend);
+    const clearBtn = container.querySelector(".ls-filter-clear");
+    if (clearBtn && typeof onClearModel === "function") {
+      clearBtn.onclick = () => onClearModel();
+    }
+    renderChart(spend, models);
   }
 
   // 首次进入这个 tab 才拉数据：没配置的人不该因为切页签就吃一次失败
   function ensure() {
-    if (!state.loadedOnce && !state.loading) load(false);
-    else render();
+    const filters = typeof getFilters === "function" ? getFilters() : {};
+    const dateChanged = (filters.from || "") !== state.lastFrom || (filters.to || "") !== state.lastTo;
+    if (!state.loadedOnce || dateChanged) {
+      load(false);
+    } else {
+      render();
+    }
   }
 
   container.innerHTML = `<div class="ls-empty">正在准备 Lithos 消费视图…</div>`;
   return {
     ensure,
+    reloadWithFilters: () => {
+      const filters = typeof getFilters === "function" ? getFilters() : {};
+      const dateChanged = (filters.from || "") !== state.lastFrom || (filters.to || "") !== state.lastTo;
+      if (dateChanged) {
+        load(false);
+      } else {
+        render();
+      }
+    },
     reload: (force = true) => load(force),
     destroy: () => {
       if (state.chart) { try { state.chart.destroy(); } catch {} state.chart = null; }

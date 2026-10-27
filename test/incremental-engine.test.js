@@ -40,7 +40,8 @@ test("engine preserves official-ledger normalization and archives only valid ter
 
     assert.equal(result.newArchivedCount, 1);
     assert.equal(session.totalTokens, 15);
-    assert.equal(session.input, 10);
+    // input 对外统一是未命中输入；原始 total input 仍保存在归档里的 inputTokens。
+    assert.equal(session.input, 8);
     assert.equal(session.inputUncached, 8);
     assert.equal(session.assistantCount, 1);
     assert.equal(data.agentNames["agent-a"], "阿尔法");

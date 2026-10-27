@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import https from "node:https";
 import crypto from "node:crypto";
 import vm from "node:vm";
 import { trackerStatus } from "../lib/runtime-health.mjs";
@@ -17,7 +16,10 @@ import { CodexQuotaService } from "../lib/codex-quota.mjs";
 import { DeepSeekBalanceService } from "../lib/deepseek-balance.mjs";
 import { LithosBalanceService, looseCookieValues, monthToDateUtc } from "../lib/lithos-balance.mjs";
 import { DeepSeekUsageService } from "../lib/deepseek-usage.mjs";
-const UI_VERSION = JSON.parse(fs.readFileSync(new URL('../manifest.json', import.meta.url), 'utf8')).version;
+import { writeFileAtomic } from "../runtime/engine/services/jsonl-log.js";
+const MANIFEST = JSON.parse(fs.readFileSync(new URL('../manifest.json', import.meta.url), 'utf8'));
+const UI_VERSION = MANIFEST.version;
+const BALANCE_ALLOWED_HOSTS = new Set(MANIFEST.network?.allowedHosts || []);
 
 // OpenCode Go 官方定价表（opencode.ai/docs/go 校验）
 const DEFAULT_PRICE_TABLE = {
@@ -135,6 +137,24 @@ const CACHE_DURATION = 6 * 60 * 60 * 1000;
 
 const appTimeZone = (typeof process !== "undefined" && process?.env?.TOKEN_TRACKER_FORCE_TZ) || "Asia/Shanghai";
 
+function dateInAppTimeZone(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-CA", { timeZone: appTimeZone }).format(date);
+}
+
+function hourInAppTimeZone(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return undefined;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: appTimeZone,
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value);
+  return Number.isFinite(hour) ? hour : undefined;
+}
+
 async function fetchFxRate(ctx) {
   const now = Date.now();
   if (cachedRate && (now - lastFetchTime < CACHE_DURATION)) {
@@ -173,17 +193,6 @@ async function fetchFxRate(ctx) {
         } finally {
           clearTimeout(timer);
         }
-      } else {
-        data = await new Promise((resolve) => {
-          https.get("https://open.er-api.com/v6/latest/USD", { timeout: 3000 }, (res) => {
-            let body = "";
-            res.on("data", (chunk) => body += chunk);
-            res.on("end", () => {
-              try { resolve(JSON.parse(body)); } catch { resolve(null); }
-            });
-          }).on("error", () => resolve(null))
-            .on("timeout", function() { this.destroy(); resolve(null); });
-        });
       }
       if (data && data.result === "success" && data.rates && data.rates.CNY) {
         cachedRate = data.rates.CNY;
@@ -217,6 +226,7 @@ function sanitizeBalanceApisForClient(balApis) {
       url: conf.url || "",
       workspaceId: conf.workspaceId || "",
       responseType: conf.responseType || "",
+      configError: conf.configError || "",
       configured: !!(conf.token || conf.cookie || conf.apiKey || conf.ak || conf.sk),
       hasToken: !!conf.token,
       hasCookie: !!conf.cookie,
@@ -359,6 +369,17 @@ export default function (app, ctx) {
 
       for (const prov of providers) {
         const apiConf = balApis[prov.id];
+        if (apiConf?.configError) {
+          result._balances.push({
+            provider: prov.id,
+            label: prov.id,
+            type: "config-error",
+            display: "余额 URL 配置无效",
+            error: "余额 URL 不在 manifest allowlist 内或包含认证信息",
+            url: apiConf.url || "",
+          });
+          continue;
+        }
         if (!apiConf || !apiConf.url) {
           result._balances.push({ provider: prov.id, label: prov.id, type: "none", display: "未配置" });
           continue;
@@ -407,8 +428,8 @@ export default function (app, ctx) {
 
         const b = await Promise.race([
           (apiConf.responseType === "token-plan")
-            ? fetchMinimaxTokenPlan(apiConf, apiKey)
-            : fetchBalance(apiConf, apiKey),
+            ? fetchMinimaxTokenPlan(apiConf, apiKey, { network: ctx.network, fetchFn: globalThis.fetch })
+            : fetchBalance(apiConf, apiKey, { network: ctx.network, fetchFn: globalThis.fetch }),
           new Promise(r => setTimeout(() => r(null), 4000))
         ]);
 
@@ -451,50 +472,55 @@ export default function (app, ctx) {
         mgMap[mg.provider + "/" + mg.model] = mg;
       }
 
-      for (const m of result.models || []) {
-        let prov = "";
-        for (const pc of providers) {
-          if (pc.models.includes(m.id)) { prov = pc.id; break; }
-        }
-        let key = prov + "/" + m.id;
-        let price = pt[key];
-        if (!price && pt) {
-          for (const pk of Object.keys(pt)) {
-            if (pk.endsWith("/" + m.id)) { price = pt[pk]; key = pk; prov = pk.split("/")[0]; break; }
-          }
-        }
+      for (const usage of result.modelUsageByProvider || []) {
+        const key = usage.provider ? `${usage.provider}/${usage.model}` : `/${usage.model}`;
+        const price = resolvePriceEntry(pt, usage.provider, usage.model);
         const mgEntry = mgMap[key];
-        const mv = (price?.unit === "per_call" && mgEntry) ? { ...m, callCount: mgEntry.callCount } : m;
+        const mv = (price?.unit === "per_call" && mgEntry) ? { ...usage, callCount: mgEntry.callCount } : usage;
         const unit = price?.unit || "token";
         let inputCost = 0, outputCost = 0, cacheCost = 0;
+        let estimatedCost = 0;
         if (price && unit === "token") {
-          const mvc = { input: m.input || 0, output: m.output || 0, cacheRead: m.cacheRead || 0, cacheWrite: m.cacheWrite || 0, assistantCount: m.assistantCount || 0, callCount: m.assistantCount || 0 };
+          const mvc = {
+            input: usage.input || 0,
+            output: usage.output || 0,
+            cacheRead: usage.cacheRead || 0,
+            cacheWrite: usage.cacheWrite || 0,
+            assistantCount: usage.assistantCount || 0,
+            callCount: usage.assistantCount || 0,
+          };
           const tp = pickPrice(price, mvc, 12);
           if ((tp.unit || "token") === "token") {
             inputCost = mvc.input * (tp.inputPerM || 0) / 1e6;
             outputCost = mvc.output * (tp.outputPerM || 0) / 1e6;
             cacheCost = mvc.cacheRead * (tp.inputCachePerM || 0) / 1e6 + mvc.cacheWrite * (tp.cacheWritePerM || 0) / 1e6;
+            estimatedCost = inputCost + outputCost + cacheCost;
           } else {
-            const tot = calcCost(price, mvc, 12);
-            inputCost = tot; outputCost = 0; cacheCost = 0;
+            estimatedCost = calcCost(price, mvc, 12);
+            inputCost = estimatedCost;
           }
+        } else if (price) {
+          estimatedCost = calcCost(price, mv, 12);
         }
-        const estimatedCost = (unit === "token" && price) ? (inputCost + outputCost + cacheCost) : calcCost(price, mv);
         modelCosts.push({
-          model: m.id,
-          provider: prov,
+          model: usage.model,
+          provider: usage.provider,
           cost: estimatedCost,
           estimatedCost,
-          costSource: "local-estimate",
+          costSource: price ? "local-estimate" : "unpriced",
           priced: !!price,
-          totalTokens: m.totalTokens || 0,
+          totalTokens: usage.totalTokens || 0,
+          input: usage.input || 0,
+          output: usage.output || 0,
+          cacheRead: usage.cacheRead || 0,
+          cacheWrite: usage.cacheWrite || 0,
           unit,
           inputCost,
           outputCost,
           cacheCost,
-          callCount: m.assistantCount || mgEntry?.callCount || 0,
+          callCount: usage.assistantCount || mgEntry?.callCount || 0,
           successCount: mgEntry?.successCount || 0,
-          currency: price?.currency || "USD"
+          currency: price?.currency || null,
         });
       }
       result._modelCosts = modelCosts;
@@ -532,6 +558,31 @@ export default function (app, ctx) {
       return c.json(quota);
     } catch (e) {
       return c.json({ connected: false, reason: "error", message: e.message || "Codex 额度查询失败" }, 200);
+    }
+  };
+
+  const handleCodexResetCredits = async (c) => {
+    try {
+      const force = c.req.query("force") === "1" || c.req.query("refresh") === "1";
+      const credits = await codexQuotaService.getResetCredits({ force });
+      return c.json(credits);
+    } catch (e) {
+      return c.json({ connected: false, reason: "error", message: e.message || "Codex 重置卡查询失败", credits: [], availableCount: 0 }, 200);
+    }
+  };
+
+  const handleCodexResetConsume = async (c) => {
+    try {
+      let body = {};
+      try { body = await c.req.json(); } catch { body = {}; }
+      const creditId = body.creditId || body.credit_id;
+      const res = await codexQuotaService.consumeResetCredit({
+        creditId,
+        ...(Object.hasOwn(body, "redeemRequestId") ? { redeemRequestId: body.redeemRequestId } : {}),
+      });
+      return c.json(res, res.ok ? 200 : 400);
+    } catch (e) {
+      return c.json({ ok: false, code: "error", message: e.message || "核销请求失败" }, 200);
     }
   };
 
@@ -601,20 +652,22 @@ export default function (app, ctx) {
     return c.json({ configured: lithosBalanceService.configured() });
   };
 
-  // DeepSeek 官方用量：平台只有按月接口，所以区间是「几个月相加」（本月 / 上月 / 近三个月）。
+  // DeepSeek 官方用量：平台只有按月接口，支持日期切片与按月聚合。
   const handleDeepseekUsage = async (c) => {
     try {
       const force = c.req.query("force") === "1" || c.req.query("refresh") === "1";
       const rangeKind = c.req.query("range") || "month";
+      const start = c.req.query("start") || null;
+      const end = c.req.query("end") || null;
       const [usage, summary] = await Promise.all([
-        deepseekUsageService.getUsage({ range: rangeKind, force }),
+        deepseekUsageService.getUsage({ range: rangeKind, start, end, force }),
         deepseekUsageService.getSummary({ force }),
       ]);
       // 余额与用量互不牵连：一个挂了另一个照常给
       return c.json({
         ...usage,
         provider: "deepseek-platform",
-        range: rangeKind,
+        range: (start && end) ? "custom" : rangeKind,
         balance: { connected: !!summary.connected, ...summary },
       });
     } catch (e) {
@@ -734,11 +787,23 @@ export default function (app, ctx) {
             newConf[k] = oldConf[k];
           }
         }
+        if (newConf.url !== undefined) {
+          const normalizedUrl = validateBalanceUrl(newConf.url);
+          if (!normalizedUrl) {
+            return c.json({ ok: false, code: "INVALID_BALANCE_URL", message: "余额 URL 只能使用 manifest allowlist 内的 HTTPS 主机，且不能含用户名或密码" }, 400);
+          }
+          newConf.url = normalizedUrl;
+        } else if (oldConf.url) {
+          newConf.url = oldConf.url;
+        }
         merged[provId] = newConf;
       }
 
-      fs.writeFileSync(p, JSON.stringify(merged, null, 2), "utf-8");
-      return c.json({ ok: true, data: sanitizeBalanceApisForClient(merged) });
+      writeFileAtomic(p, JSON.stringify(merged, null, 2), 0o600);
+      if (Object.hasOwn(incoming || {}, "deepseek") || Object.hasOwn(incoming || {}, "deepseek-chat")) {
+        deepseekBalanceService.invalidate();
+      }
+      return c.json({ ok: true, data: sanitizeBalanceApisForClient(loadBalanceApis(dataDir)) });
     } catch (e) {
       return c.json({ error: e.message, code: "SAVE_ERROR" }, 500);
     }
@@ -790,7 +855,7 @@ export default function (app, ctx) {
       const priceTable = loadPriceTable(dataDir);
       const calls = res.calls.map((call) => {
         const price = resolvePriceEntry(priceTable, call.provider, call.model);
-        const hour = call.startedAt ? new Date(call.startedAt).getHours() : undefined;
+        const hour = call.startedAt ? hourInAppTimeZone(call.startedAt) : undefined;
         const cost = price
           ? calcCost(price, {
               input: call.input,
@@ -891,7 +956,7 @@ export default function (app, ctx) {
             const cv = s.conversations[i];
             if (model && cv.model !== model) continue;
             if (provider && cv.provider !== provider) continue;
-            const day = cv.time ? cv.time.slice(0, 10) : "";
+            const day = cv.time ? dateInAppTimeZone(cv.time) : "";
             if (from && day < from) continue;
             if (to && day > to) continue;
             const total = Number(cv.totalTokens || 0);
@@ -970,7 +1035,7 @@ export default function (app, ctx) {
           const cv = s.conversations[i];
           if (model && cv.model !== model) continue;
           if (provider && cv.provider !== provider) continue;
-          const day = cv.time ? cv.time.slice(0, 10) : "";
+          const day = cv.time ? dateInAppTimeZone(cv.time) : "";
           if (from && day < from) continue;
           if (to && day > to) continue;
           const total = Number(cv.totalTokens || 0);
@@ -1079,6 +1144,10 @@ export default function (app, ctx) {
 
   app.get("/dashboard/codex-quota", handleCodexQuota);
   app.get("/codex-quota", handleCodexQuota);
+  app.get("/dashboard/codex-reset-credits", handleCodexResetCredits);
+  app.get("/codex-reset-credits", handleCodexResetCredits);
+  app.post("/dashboard/codex-reset-credits/consume", handleCodexResetConsume);
+  app.post("/codex-reset-credits/consume", handleCodexResetConsume);
 
   app.get("/dashboard/deepseek-balance", handleDeepseekBalance);
   app.get("/deepseek-balance", handleDeepseekBalance);
@@ -1123,11 +1192,16 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
 
   if (range === "today") {
     dateFilter = (d) => d === cnTodayStr;
+  } else if (range === "yesterday") {
+    const yd = new Date(now);
+    yd.setDate(yd.getDate() - 1);
+    const yesterdayStr = new Intl.DateTimeFormat("en-CA", { timeZone: appTimeZone }).format(yd);
+    dateFilter = (d) => d === yesterdayStr;
   } else if (range === "week") {
-    const day = now.getDay();
-    const ws = new Date(now);
-    ws.setDate(ws.getDate() - ((day + 6) % 7));
-    const weekStart = new Intl.DateTimeFormat("en-CA", { timeZone: appTimeZone }).format(ws);
+    const weekDate = new Date(`${cnTodayStr}T00:00:00Z`);
+    const weekDay = weekDate.getUTCDay();
+    weekDate.setUTCDate(weekDate.getUTCDate() - ((weekDay + 6) % 7));
+    const weekStart = weekDate.toISOString().slice(0, 10);
     dateFilter = (d) => d >= weekStart;
   } else if (range === "month") {
     const monthStart = cnTodayStr.slice(0, 7) + "-01";
@@ -1156,8 +1230,16 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
     if (!filterProvider) return Object.entries(bucket.models || {}).filter(([model]) => !filterModel || model === filterModel);
     const prefix = filterProvider + "/";
     return Object.entries(bucket.providerTotals || {})
-      .filter(([key]) => key.startsWith(prefix) && (!filterModel || key === prefix + filterModel))
-      .map(([key, stats]) => [key.slice(prefix.length), stats]);
+      .filter(([key, stats]) => {
+        const slash = key.indexOf("/");
+        const provider = stats?.provider || (slash > 0 ? key.slice(0, slash) : "");
+        const model = stats?.model || (slash >= 0 ? key.slice(slash + 1) : "");
+        return provider === filterProvider && (!filterModel || model === filterModel);
+      })
+      .map(([key, stats]) => {
+        const slash = key.indexOf("/");
+        return [stats?.model || (slash >= 0 ? key.slice(slash + 1) : key), stats];
+      });
   }
   function selectedStats(bucket) {
     if (!filterModel && !filterProvider) return bucket;
@@ -1170,16 +1252,30 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
 
   // 执行者维度也要吃同一套模型/供应商筛选：按该执行者的模型分布重算，不拿全量代替筛选结果。
   const actorFiltersActive = !!(filterModel || filterProvider);
+  function scopedActorModels(actor) {
+    if (!filterProvider) {
+      return Object.entries(actor.models || {})
+        .filter(([modelId]) => !filterModel || modelId === filterModel);
+    }
+    return Object.entries(actor.providerTotals || {})
+      .map(([key, stats]) => {
+        const slash = key.indexOf("/");
+        const provider = stats?.provider || (slash > 0 ? key.slice(0, slash) : "");
+        const model = stats?.model || (slash >= 0 ? key.slice(slash + 1) : key);
+        return [model, stats, provider];
+      })
+      .filter(([, , provider]) => provider === filterProvider)
+      .filter(([model]) => !filterModel || model === filterModel)
+      .map(([model, stats]) => [model, stats]);
+  }
   function scopedActorStats(actor) {
     if (!actorFiltersActive) return actor;
     const out = { totalTokens: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, assistantCount: 0, delegatedTokens: 0 };
-    for (const [modelId, stats] of Object.entries(actor.models || {})) {
-      if (filterModel && modelId !== filterModel) continue;
-      if (filterProvider && (stats.provider || "") !== filterProvider) continue;
+    for (const [, stats] of scopedActorModels(actor)) {
       for (const key of ["totalTokens", "input", "output", "cacheRead", "cacheWrite", "assistantCount"]) {
-        out[key] += stats[key] || 0;
+        out[key] += stats?.[key] || 0;
       }
-      out.delegatedTokens += stats.subTokens || 0;
+      out.delegatedTokens += stats?.subTokens || 0;
     }
     return out;
   }
@@ -1194,6 +1290,7 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
   const modelMap = {};
   const dailyMap = {};
   const providerMap = Object.create(null);
+  const modelUsageMap = Object.create(null);
   const sums = {
     totalInput: 0,
     totalOutput: 0,
@@ -1287,10 +1384,8 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
               row.parents[parentId] = (row.parents[parentId] || 0) + (tokens || 0);
             }
           }
-          for (const [modelId, modelStats] of Object.entries(actor.models || {})) {
-            if (filterModel && modelId !== filterModel) continue;
-            if (filterProvider && (modelStats.provider || "") !== filterProvider) continue;
-            row.models[modelId] = (row.models[modelId] || 0) + (modelStats.totalTokens || 0);
+          for (const [modelId, modelStats] of scopedActorModels(actor)) {
+            row.models[modelId] = (row.models[modelId] || 0) + (modelStats?.totalTokens || 0);
           }
           delegatedOut += delegated;
         }
@@ -1313,12 +1408,28 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
 
       for (const [key, stats] of Object.entries(d.providerTotals || {})) {
         const slash = key.indexOf('/');
-        if (slash < 1) continue;
-        const provider = key.slice(0, slash), model = key.slice(slash + 1);
+        const provider = stats?.provider || (slash > 0 ? key.slice(0, slash) : "");
+        const model = stats?.model || (slash >= 0 ? key.slice(slash + 1) : "");
+        if (!provider || !model) continue;
         if (filterProvider && provider !== filterProvider || filterModel && model !== filterModel) continue;
         const row = providerMap[provider] ||= { provider, totalTokens: 0, count: 0 };
         row.totalTokens += stats.totalTokens || 0;
         row.count += stats.assistantCount || 0;
+        const usageKey = `${provider}/${model}`;
+        const usage = modelUsageMap[usageKey] ||= {
+          provider,
+          model,
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          assistantCount: 0,
+          subTokens: 0,
+        };
+        for (const field of ["input", "output", "cacheRead", "cacheWrite", "totalTokens", "assistantCount", "subTokens"]) {
+          usage[field] += stats[field] || 0;
+        }
       }
 
       // 聚合 model
@@ -1360,6 +1471,24 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
     id,
     ...d,
   })).sort((a, b) => b.totalTokens - a.totalTokens);
+
+  // 费用必须保留 provider/model 维度；旧缓存没有 providerTotals 时只保留未知 provider，绝不借用别家价格。
+  const modelUsageByProvider = Object.values(modelUsageMap);
+  if (!modelUsageByProvider.length) {
+    for (const model of models) {
+      modelUsageByProvider.push({
+        provider: "",
+        model: model.id,
+        input: model.input || 0,
+        output: model.output || 0,
+        cacheRead: model.cacheRead || 0,
+        cacheWrite: model.cacheWrite || 0,
+        totalTokens: model.totalTokens || 0,
+        assistantCount: model.assistantCount || 0,
+        subTokens: 0,
+      });
+    }
+  }
 
   // 侧边栏 Agent 筛选选项：只保留当前已注册的 Agent，不展示子代理池成员。
   // 池成员（hana-artisan / luna…）不拥有会话桶，放进筛选只会得到一个永远为空的结果。
@@ -1456,17 +1585,22 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
   }
   const hourly = Object.values(hourlyMap).sort((a, b) => a.hour.localeCompare(b.hour));
 
-  // 估算费用
-  let estimatedCost = 0;
-  for (const m of models) {
-    let price = priceTable[m.id];
+  // 估算费用：按 provider/model 分组，并按币种保留合计；缺价或多币种时不制造单一总额。
+  const estimatedCostByCurrency = Object.create(null);
+  let hasUnpriced = false;
+  for (const usage of modelUsageByProvider) {
+    const price = resolvePriceEntry(priceTable, usage.provider, usage.model);
     if (!price) {
-      for (const pk of Object.keys(priceTable)) {
-        if (pk.endsWith("/" + m.id)) { price = priceTable[pk]; break; }
-      }
+      hasUnpriced = true;
+      continue;
     }
-    estimatedCost += calcCost(price, m);
+    const currency = price.currency || "USD";
+    estimatedCostByCurrency[currency] = (estimatedCostByCurrency[currency] || 0) + calcCost(price, usage);
   }
+  const currencies = Object.keys(estimatedCostByCurrency);
+  const estimatedCost = !hasUnpriced && currencies.length <= 1
+    ? (currencies.length ? estimatedCostByCurrency[currencies[0]] : 0)
+    : null;
 
   return {
     lastScan: cache.lastScan,
@@ -1479,6 +1613,7 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
       // 永远对不上」；式子收进 ui/hit-rate.js，明细行与 KPI 卡用同一份实现。
       cacheHitRate: hitRatePercent(sums.totalCacheRead, sums.totalInput + sums.totalCacheRead),
       estimatedCost,
+      estimatedCostByCurrency: Object.fromEntries(Object.entries(estimatedCostByCurrency)),
     },
     agents,
     actors,
@@ -1486,6 +1621,7 @@ function build(cache, range = "all", filters = {}, fxRate = null) {
     poolAgentIds: [...poolIds],
     agentOptions,
     models,
+    modelUsageByProvider,
     modelOptions,
     providers: Object.values(providerMap).sort((a,b)=>b.totalTokens-a.totalTokens),
     providerOptions,
@@ -1563,16 +1699,12 @@ function buildPredictionResponse(cache, daily) {
   return { ...base, predictedToday, trend };
 }
 
-// 价格查找：先按「供应商/模型」精确找，再按纯模型名，最后扫一遍 *\/模型 后缀。
-// 明细详情与看板费估算必须用同一套查找规则，否则同一次调用会在两处得到不同价。
+// 价格查找：先按「供应商/模型」精确找；无供应商条目才允许使用明确的纯模型通用价。
+// 明细详情与看板费估算必须用同一套查找规则，不能把别家 provider 的价格借过来。
 function resolvePriceEntry(priceTable, provider, model) {
   if (!priceTable || !model) return null;
   if (provider && priceTable[provider + "/" + model]) return priceTable[provider + "/" + model];
-  if (priceTable[model]) return priceTable[model];
-  const suffix = "/" + model;
-  for (const pk of Object.keys(priceTable)) {
-    if (pk.endsWith(suffix)) return priceTable[pk];
-  }
+  if (!provider && priceTable[model]) return priceTable[model];
   return null;
 }
 
@@ -1600,82 +1732,97 @@ const DEFAULT_BALANCE_APIS = {
   },
 };
 
+function validateBalanceUrl(raw) {
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  try {
+    const url = new URL(raw.trim());
+    if (url.protocol !== "https:" || url.username || url.password) return null;
+    if (!BALANCE_ALLOWED_HOSTS.has(url.hostname.toLowerCase())) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 function loadBalanceApis(dataDir) {
   const p = path.join(dataDir, "balance-apis.json");
   const saved = {};
   try {
-    if (fs.existsSync(p)) Object.assign(saved, JSON.parse(fs.readFileSync(p, "utf-8")));
+    const raw = fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf-8")) : {};
+    for (const [providerId, conf] of Object.entries(raw || {})) {
+      if (!conf || typeof conf !== "object") continue;
+      if (conf.url !== undefined && !validateBalanceUrl(conf.url)) {
+        saved[providerId] = { ...conf, configError: "invalid_url" };
+        continue;
+      }
+      saved[providerId] = conf;
+    }
   } catch {}
   return { ...DEFAULT_BALANCE_APIS, ...saved };
 }
 
-async function fetchBalance(apiConfig, apiKey) {
-  return new Promise((resolve) => {
-    const req = https.get(apiConfig.url, {
-      headers: { "Authorization": "Bearer " + apiKey, "Accept": "application/json" }
-    }, (res) => {
-      let body = "";
-      res.on("data", (chunk) => body += chunk);
-      res.on("end", () => {
-        try {
-          const d = JSON.parse(body);
-          if (d.balance_infos && d.balance_infos.length) {
-            let total = 0; const details = [];
-            for (const bi of d.balance_infos) {
-              const t = parseFloat(bi.total_balance) || 0;
-              total += t;
-              details.push({ label: bi.label || "余额", amount: t, currency: bi.currency || "CNY" });
-            }
-            resolve({ type: "money", total, currency: "CNY", display: "¥" + total.toFixed(2), details });
-          } else if (d.success && d.data?.limits) {
-            const tokenLimit = d.data.limits.find((l) => l.type === "TOKENS_LIMIT");
-            if (tokenLimit && typeof tokenLimit.percentage === "number") {
-              const remain = 100 - tokenLimit.percentage;
-              resolve({ type: "quota", remain, used: tokenLimit.percentage, display: "剩余 " + remain.toFixed(0) + "%" });
-            } else resolve(null);
-          } else {
-            const avail = parseFloat(d.data?.available_balance ?? d.data?.balance ?? d.available_balance ?? d.balance ?? d.total_balance) || 0;
-            if (avail > 0 || d.data || d.balance !== undefined) {
-              resolve({ type: "money", total: avail, currency: d.currency || "CNY", display: "¥" + avail.toFixed(2) });
-            } else resolve(null);
-          }
-        } catch (e) {
-          resolve(null);
-        }
-      });
+async function fetchAllowedBalanceJson(apiConfig, apiKey, { network = null, fetchFn = globalThis.fetch } = {}) {
+  const url = validateBalanceUrl(apiConfig?.url);
+  if (!url || typeof apiKey !== "string" || !apiKey) return null;
+  const doFetch = network?.fetch ? (u, init) => network.fetch(u, init) : fetchFn;
+  if (typeof doFetch !== "function") return null;
+  try {
+    const signal = !network?.fetch && typeof AbortSignal !== "undefined" && AbortSignal.timeout
+      ? AbortSignal.timeout(3000)
+      : undefined;
+    const response = await doFetch(url, {
+      method: "GET",
+      headers: { "Authorization": "Bearer " + apiKey, "Accept": "application/json" },
+      redirect: "error",
+      timeoutMs: 3000,
+      ...(signal ? { signal } : {}),
     });
-    req.on("error", () => resolve(null));
-    req.setTimeout(3000, () => { req.destroy(); resolve(null); });
-  });
+    const status = Number(response?.status) || 0;
+    if (response?.redirected || (response?.ok !== true && !(status >= 200 && status < 300))) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
 }
 
-async function fetchMinimaxTokenPlan(apiConfig, apiKey) {
-  if (!apiKey) return Promise.resolve({ type: "error", display: "API Key 为空" });
-  return new Promise((resolve) => {
-    const req = https.get(apiConfig.url, {
-      headers: {
-        "Authorization": "Bearer " + apiKey,
-        "Accept": "application/json",
+async function fetchBalance(apiConfig, apiKey, transport = {}) {
+  const d = await fetchAllowedBalanceJson(apiConfig, apiKey, transport);
+  if (!d) return null;
+  try {
+    if (d.balance_infos && d.balance_infos.length) {
+      let total = 0; const details = [];
+      for (const bi of d.balance_infos) {
+        const t = parseFloat(bi.total_balance) || 0;
+        total += t;
+        details.push({ label: bi.label || "余额", amount: t, currency: bi.currency || "CNY" });
       }
-    }, (res) => {
-      let body = "";
-      res.on("data", (chunk) => body += chunk);
-      res.on("end", () => {
-        try {
-          const d = JSON.parse(body);
-          if (!d || d.base_resp?.status_code !== 0) {
-            resolve({ type: "error", display: d?.base_resp?.status_msg || "查询失败" });
-            return;
-          }
-          resolve({ type: "token-plan", display: "已获取" });
-        } catch (e) {
-          resolve({ type: "error", display: "解析失败" });
-        }
-      });
-    });
-    req.on("error", () => resolve({ type: "error", display: "网络错误" }));
-    req.setTimeout(3000, () => { req.destroy(); resolve({ type: "error", display: "请求超时" }); });
-  });
+      return { type: "money", total, currency: "CNY", display: "¥" + total.toFixed(2), details };
+    }
+    if (d.success && d.data?.limits) {
+      const tokenLimit = d.data.limits.find((l) => l.type === "TOKENS_LIMIT");
+      if (tokenLimit && typeof tokenLimit.percentage === "number") {
+        const remain = 100 - tokenLimit.percentage;
+        return { type: "quota", remain, used: tokenLimit.percentage, display: "剩余 " + remain.toFixed(0) + "%" };
+      }
+      return null;
+    }
+    const avail = parseFloat(d.data?.available_balance ?? d.data?.balance ?? d.available_balance ?? d.balance ?? d.total_balance) || 0;
+    if (avail > 0 || d.data || d.balance !== undefined) {
+      return { type: "money", total: avail, currency: d.currency || "CNY", display: "¥" + avail.toFixed(2) };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchMinimaxTokenPlan(apiConfig, apiKey, transport = {}) {
+  if (!apiKey) return { type: "error", display: "API Key 为空" };
+  const d = await fetchAllowedBalanceJson(apiConfig, apiKey, transport);
+  if (!d || d.base_resp?.status_code !== 0) {
+    return { type: "error", display: d?.base_resp?.status_msg || "查询失败" };
+  }
+  return { type: "token-plan", display: "已获取" };
 }
 
 function esc(v) {

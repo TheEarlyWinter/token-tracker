@@ -688,8 +688,7 @@ test("a failed final barrier clear keeps pending and recovers on the next scan",
   await engine.scan(numberedEntries(3), {});
   // 1=开始屏障，2=聚合 meta，3=applyTurns 内部 meta，4=最终清屏障。
   const restore = failCacheMetaAt(engine, 4);
-  const result = await engine.scan(numberedEntries(1, { from: 3 }), {});
-  assert.equal(result.newArchivedCount, 1);
+  await assert.rejects(engine.scan(numberedEntries(1, { from: 3 }), {}), { code: "AGGREGATE_WRITE_FAILED" });
   assert.equal(engine.getData().aggregateWritePending, true, "清屏障失败不得宣称完整提交");
   assert.equal(engine.getData().turnsIndexReady, false);
   restore();

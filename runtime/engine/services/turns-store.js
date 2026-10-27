@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { formatAppDay } from "./platform.js";
 
 const require = createRequire(import.meta.url);
 
@@ -71,15 +72,7 @@ function pushEq(where, params, col, v) {
 }
 
 function localDay(ts) {
-  const d = ts ? new Date(ts) : null;
-  if (!d || isNaN(d.getTime())) return "unknown";
-  return (
-    d.getFullYear() +
-    "-" +
-    String(d.getMonth() + 1).padStart(2, "0") +
-    "-" +
-    String(d.getDate()).padStart(2, "0")
-  );
+  return formatAppDay(ts);
 }
 
 function num(v) {

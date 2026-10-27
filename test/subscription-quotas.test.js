@@ -39,6 +39,25 @@ test('renderHdrQuota renders quota pills or hides when no data exists', () => {
   assert.match(container.innerHTML, /剩余 60%/);
 });
 
+test('estimated-only subscription data remains visible when official quota is unavailable', () => {
+  const container = { style: { display: 'none' }, innerHTML: '' };
+  renderSubscriptionQuotas({
+    container,
+    quotas: [{
+      type: 'opencode-go-quota-est',
+      label: 'OpenCode Go',
+      est: true,
+      windows: [{ level: 'rolling', usedUsd: 1, limitUsd: 12 }],
+      monthlyModelUsage: [{ model: 'deepseek-v4-flash', costUsd: 2.5, count: 10 }],
+    }],
+    priceTable: { 'opencode-go/deepseek-v4-flash': { monthlyAllowance: 60 } },
+  });
+  assert.equal(container.style.display, '');
+  assert.match(container.innerHTML, /本地估算/);
+  assert.match(container.innerHTML, /deepseek-v4-flash/);
+  assert.match(container.innerHTML, /2\.50/);
+});
+
 test('renderSubscriptionQuotas correctly renders cards and badges', () => {
   const container = { style: { display: '' }, innerHTML: '' };
   const quotas = [

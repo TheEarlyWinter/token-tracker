@@ -94,7 +94,7 @@ export function renderSubscriptionQuotas({
   let hasData = false;
   for (let i = 0; i < quotas.length; i++) {
     const qt = quotas[i].type || "";
-    if (qt === "opencode-go-quota" || qt === "quota" || qt === "coding-plan-quota" || qt === "error" || qt === "no-token") {
+    if (qt === "opencode-go-quota" || qt === "opencode-go-quota-est" || qt === "quota" || qt === "coding-plan-quota" || qt === "error" || qt === "no-token") {
       hasData = true;
       break;
     }

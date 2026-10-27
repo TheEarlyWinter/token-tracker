@@ -10,6 +10,7 @@ const SAFE_MESSAGES = new Map([
   ["UNAUTHORIZED", "未授权的 RPC 请求"],
   ["REQUEST_TOO_LARGE", "RPC 请求超过大小限制"],
   ["RECORD_TOO_LARGE", "单条缓存记录超过传输限制"],
+  ["AGGREGATE_WRITE_FAILED", "扫描结果未完成持久化"],
   ["NOT_FOUND", "RPC 任务不存在"],
 ]);
 
@@ -95,6 +96,14 @@ export function createRpcDispatcher({ getEngine, getInitError = () => null } = {
       if (pending.entries.length + payload.entries.length > MAX_SCAN_ENTRIES) throw Object.assign(new Error("too many ledger entries"), { code: "INVALID_PAYLOAD" });
       for (const entry of payload.entries) if (isObject(entry)) pending.entries.push(entry);
       return { accepted: true, received: pending.entries.length };
+    }
+
+    if (method === "scan.abort") {
+      if (typeof payload.scanId !== "string" || payload.scanId.length < 1 || payload.scanId.length > 128) throw Object.assign(new Error("invalid scan id"), { code: "INVALID_PAYLOAD" });
+      // 只回收尚未 commit 的同一批 pending；已提交的 job 没有可取消语义。
+      if (!pending || payload.scanId !== pending.scanId) return { accepted: false, aborted: false, scanId: payload.scanId };
+      pending = null;
+      return { accepted: true, aborted: true, scanId: payload.scanId };
     }
 
     if (method === "scan.commit") {

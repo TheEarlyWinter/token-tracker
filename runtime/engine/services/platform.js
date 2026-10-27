@@ -7,6 +7,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+export const appTimeZone = process.env.TOKEN_TRACKER_FORCE_TZ || "Asia/Shanghai";
+const appDayFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: appTimeZone });
+
+export function formatAppDay(value) {
+  const date = value instanceof Date ? value : (value == null ? null : new Date(value));
+  if (!date || !Number.isFinite(date.getTime())) return "unknown";
+  return appDayFormatter.format(date);
+}
+
 export function resolveHanaHome({ env = process.env, platform = process.platform, homedir = os.homedir } = {}) {
   const paths = platform === "win32" ? path.win32 : path.posix;
   if (env.HANA_HOME) {

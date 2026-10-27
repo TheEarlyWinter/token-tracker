@@ -167,3 +167,14 @@ test("visual-analytics computes quantiles, bins and multi-agent summaries", () =
   assert.equal(analytics.agents[0].id, "gemini-coder");
   assert.equal(analytics.agents[0].totalTokens, 10000);
 });
+
+test("页签接线：调用明细（turns）拥有独立 Tab 按钮与独立视图容器", () => {
+  const app = fs.readFileSync(new URL("../ui/dashboard-app.js", import.meta.url), "utf8");
+  assert.match(app, /data-view="turns">调用明细<\/button>/);
+  assert.match(app, /id="turns-view"/);
+  assert.match(app, /id="turns-inspector-section"/);
+  assert.match(app, /_activeView === "turns"/);
+
+  const css = fs.readFileSync(new URL("../ui/base.css", import.meta.url), "utf8");
+  assert.match(css, /\.turns-view/);
+});

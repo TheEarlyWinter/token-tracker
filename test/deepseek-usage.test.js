@@ -9,6 +9,8 @@ import {
   monthKey,
   normalizeMonth,
   mergeMonths,
+  matchModelName,
+  sliceUsage,
   DeepSeekUsageService,
 } from "../lib/deepseek-usage.mjs";
 
@@ -370,4 +372,114 @@ test("页签接线：入口页有 ds-usage 视图与区块", () => {
   assert.match(mod, /官方账单/, "口径说明要在界面上");
   assert.match(mod, /key: "last"/, "区间要按月");
   assert.doesNotMatch(mod, /d7|d30/, "平台没有按天的区间接口，不该摆出来");
+});
+
+test("外部账单筛选联动：DeepSeek 视图支持模型过滤与清除，并接入 getFilters", async () => {
+  const mod = await import("../ui/modules/deepseek-usage.js");
+  assert.equal(typeof mod.createDeepSeekUsage, "function");
+
+  const container = {
+    innerHTML: "",
+    querySelector: () => null,
+    querySelectorAll: () => [],
+  };
+
+  let cleared = false;
+  const instance = mod.createDeepSeekUsage({
+    container,
+    fetchFn: async () => ({ ok: true, json: async () => ({ connected: true, days: [], models: [] }) }),
+    getFilters: () => ({ model: "deepseek-chat" }),
+    onClearModel: () => { cleared = true; },
+  });
+
+  assert.ok(instance, "createDeepSeekUsage should return instance");
+  assert.equal(typeof instance.reloadWithFilters, "function");
+});
+
+test("外部账单筛选联动：DeepSeek 视图支持日期范围联动与按天切片", async () => {
+  const oct = normalizeMonth(AMOUNT, COST, { year: 2026, month: 10 });
+  assert.equal(oct.days.length, 2);
+
+  // 切到 10-26（单日，如「昨天」）
+  const d26 = sliceUsage(oct, { start: "2026-10-26", end: "2026-10-26" });
+  assert.equal(d26.days.length, 1);
+  assert.equal(d26.days[0].day, "2026-10-26");
+  assert.equal(d26.totalCost, 2.4028);
+  assert.equal(d26.models.length, 2);
+  const flash26 = d26.models.find((m) => m.model === "deepseek-flash");
+  assert.equal(flash26.cost, 2.4002);
+  assert.equal(flash26.days, 1);
+  assert.equal(flash26.requests, 242);
+
+  // 切到 10-27（单日，如「今日」）
+  const d27 = sliceUsage(oct, { start: "2026-10-27", end: "2026-10-27" });
+  assert.equal(d27.days.length, 1);
+  assert.equal(d27.days[0].day, "2026-10-27");
+  assert.equal(d27.totalCost, 0.1952);
+  assert.equal(d27.models.length, 1, "27号只有 flash 有记录");
+
+  // 切到 10-26 ~ 10-27 并叠加模型过滤
+  const d26Pro = sliceUsage(oct, { start: "2026-10-26", end: "2026-10-27", model: "deepseek-v4-pro" });
+  assert.equal(d26Pro.days.length, 1);
+  assert.equal(d26Pro.models.length, 1);
+  assert.equal(d26Pro.models[0].model, "deepseek-v4-pro");
+  assert.equal(d26Pro.totalCost, 0.0027);
+
+  // 日期范围跨月生成月份覆盖
+  const months = buildMonths("custom", new Date("2026-10-27"), { start: "2026-08-15", end: "2026-10-27" });
+  assert.deepEqual(months, [
+    { year: 2026, month: 8 },
+    { year: 2026, month: 9 },
+    { year: 2026, month: 10 },
+  ]);
+
+  // 前端组件装配与过滤参数传递
+  const mod = await import("../ui/modules/deepseek-usage.js");
+  const container = {
+    innerHTML: "",
+    querySelector: () => null,
+    querySelectorAll: () => [],
+  };
+
+  const urls = [];
+  const instance = mod.createDeepSeekUsage({
+    container,
+    fetchFn: async (url) => {
+      urls.push(url);
+      return { ok: true, json: async () => ({ connected: true, days: [], models: [] }) };
+    },
+    getFilters: () => ({ model: "deepseek-flash", from: "2026-10-26", to: "2026-10-26" }),
+  });
+
+  instance.ensure();
+  await new Promise((r) => setTimeout(r, 10));
+  assert.ok(urls.some((u) => u.includes("start=2026-10-26") && u.includes("end=2026-10-26")), "携带日期范围参数");
+});
+
+test("外部账单筛选联动：LithosAI 视图支持日期与模型联动，并在账单视图下置灰不支持项", async () => {
+  const mod = await import("../ui/modules/lithos-spend.js");
+  assert.equal(typeof mod.createLithosSpend, "function");
+
+  const container = {
+    innerHTML: "",
+    querySelector: () => null,
+    querySelectorAll: () => [],
+  };
+
+  const instance = mod.createLithosSpend({
+    container,
+    fetchFn: async () => ({ ok: true, json: async () => ({ connected: true, days: [], models: [] }) }),
+    getFilters: () => ({ model: "DeepSeek-V4.1-Flash", from: "2026-10-01", to: "2026-10-27" }),
+  });
+
+  assert.ok(instance, "createLithosSpend should return instance");
+  assert.equal(typeof instance.reloadWithFilters, "function");
+
+  const app = fs.readFileSync(new URL("../ui/dashboard-app.js", import.meta.url), "utf8");
+  assert.match(app, /cs-disabled-billing/);
+  assert.match(app, /reloadWithFilters/);
+
+  const css = fs.readFileSync(new URL("../ui/base.css", import.meta.url), "utf8");
+  assert.match(css, /\.cs\.cs-disabled-billing/);
+  assert.match(css, /\.ls-filter-badge/);
 });

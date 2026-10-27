@@ -6,6 +6,7 @@ import { hana } from "./assets/sdk.js";
 
 // 常驻顶层 BroadcastChannel 引用，防止局部变量被垃圾回收 (GC) 导致监听器失效
 let panelBc = null;
+const RESET_MODAL_WAIT_MS = 400;
 function getPanelBroadcastChannel() {
   if (typeof BroadcastChannel === "undefined") return null;
   if (!panelBc) {
@@ -52,6 +53,44 @@ async function fetchCodexQuota(force = false) {
   }
   const res = await fetch(`${getAppApiBase()}/codex-quota${query}`);
   return await res.json();
+}
+
+export async function fetchResetCredits(force = false) {
+  const query = force ? "?refresh=1" : "";
+  if (window.hana?.api?.fetch) {
+    try {
+      const res = await window.hana.api.fetch(`/codex-reset-credits${query}`);
+      return await res.json();
+    } catch {}
+  }
+  try {
+    const res = await fetch(`${getAppApiBase()}/codex-reset-credits${query}`);
+    return await res.json();
+  } catch {
+    return { connected: false, message: "网络请求失败", credits: [] };
+  }
+}
+
+export async function consumeResetCredit(creditId) {
+  const init = {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ creditId }),
+  };
+  if (window.hana?.api?.fetch) {
+    try {
+      const res = await window.hana.api.fetch("/codex-reset-credits/consume", init);
+      return await res.json();
+    } catch (e) {
+      return { ok: false, message: e.message || "请求失败" };
+    }
+  }
+  try {
+    const res = await fetch(`${getAppApiBase()}/codex-reset-credits/consume`, init);
+    return await res.json();
+  } catch (e) {
+    return { ok: false, message: e.message || "请求失败" };
+  }
 }
 
 async function fetchLithosBalance(force = false) {
@@ -130,8 +169,53 @@ export async function loadAndRender(force = false, directSettings = null) {
     const results = await Promise.all(tasks);
     for (const res of results) {
       if (res.type === "codex") {
-        if (res.data) renderCodexQuotaCard(codexSlot, res.data);
-        else renderCodexQuotaCard(codexSlot, { connected: false, message: "额度加载失败，请重试" });
+        if (res.data) {
+          renderCodexQuotaCard(codexSlot, res.data, {
+            onFetchResetCredits: fetchResetCredits,
+            onConsumeResetCredit: consumeResetCredit,
+            onRefresh: (f) => loadAndRender(f),
+            onOpenResetModal: async () => {
+              const bc = getPanelBroadcastChannel();
+              if (!bc) return false;
+              const requestId = `reset-modal-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+              return new Promise((resolve) => {
+                let settled = false;
+                let ackTimer = null;
+                const expiresAt = Date.now() + RESET_MODAL_WAIT_MS;
+                const cleanup = () => {
+                  if (ackTimer) {
+                    clearTimeout(ackTimer);
+                    ackTimer = null;
+                  }
+                  try { bc.removeEventListener("message", onMsg); } catch {}
+                };
+                const finish = (handled) => {
+                  if (settled) return;
+                  settled = true;
+                  cleanup();
+                  resolve(handled);
+                };
+                const onMsg = (e) => {
+                  if (e.data?.type !== "reset-credits-modal-ack" || e.data?.requestId !== requestId) return;
+                  const ackExpiresAt = e.data?.expiresAt;
+                  if (Number.isFinite(ackExpiresAt) && ackExpiresAt <= Date.now()) return;
+                  finish(true);
+                };
+
+                try {
+                  bc.addEventListener("message", onMsg);
+                  ackTimer = setTimeout(() => finish(false), RESET_MODAL_WAIT_MS);
+                  bc.postMessage({ type: "open-reset-credits-modal", requestId, expiresAt });
+                } catch {
+                  finish(false);
+                }
+              });
+            },
+          });
+        } else {
+          renderCodexQuotaCard(codexSlot, { connected: false, message: "额度加载失败，请重试" });
+        }
       } else if (res.type === "deepseek") {
         if (res.data) renderDeepSeekCard(dsSlot, res.data);
         else renderDeepSeekCard(dsSlot, { connected: false, message: "余额加载失败" });

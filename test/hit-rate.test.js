@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import vm from "node:vm";
 import { hitRate, hitRatePercent, hitRatePercentText, hitRateLabel } from "../ui/hit-rate.js";
 import { openTurnsStore, HIT_SORT_EXPR } from "../runtime/engine/services/turns-store.js";
 import registerRoutes from "../server/dashboard.js";
@@ -24,6 +25,17 @@ test("三种展示形态各自守住自己的契约", () => {
   assert.equal(hitRatePercentText(967, 1000), "96.7");
   assert.equal(hitRateLabel(967, 1000), "96.7%");
   assert.equal(hitRateLabel(0, 0), "—", "明细行没数据要给破折号，不写 0%");
+});
+
+test("调用明细把未命中输入转成含缓存输入后再格式化命中率", () => {
+  const source = fs.readFileSync(new URL("../ui/modules/turns-inspector.js", import.meta.url), "utf8");
+  const start = source.indexOf("  function fmtPct(");
+  const end = source.indexOf("\n  }", start) + 4;
+  const context = vm.createContext({ hitRateLabel });
+  vm.runInContext(source.slice(start, end), context);
+  assert.equal(context.fmtPct(90, 10), "90.0%");
+  assert.equal(context.fmtPct(10, 90), "10.0%");
+  assert.equal(context.fmtPct(0, 0), "—");
 });
 
 test("SQL 排序表达式与 JS 实现同一口径", () => {

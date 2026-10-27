@@ -1,9 +1,13 @@
 // runtime/engine/services/details-csv.js
 // 轮次消费明细 CSV 流式服务端拼装
 
+function uncachedInput(r) {
+  return r?.input ?? r?.inputUncachedTokens ?? r?.inputTokens ?? 0;
+}
+
 export function hitRate(r) {
   const read = Number(r?.cacheRead || 0);
-  const uncached = Number(r?.input ?? r?.inputTokens ?? 0);
+  const uncached = Number(uncachedInput(r));
   const totalIn = read + uncached;
   if (totalIn <= 0) return null;
   return Math.max(0, Math.min(1, read / totalIn));
@@ -18,7 +22,7 @@ export function buildDetailsCSV(rows) {
       r.agentName || r.agent || "",
       r.provider || "",
       r.model || "",
-      r.input ?? r.inputTokens ?? "",
+      uncachedInput(r),
       r.output ?? r.outputTokens ?? "",
       hr == null ? "" : (hr * 100).toFixed(1) + "%",
       r.calls ?? r.msgCount ?? "",

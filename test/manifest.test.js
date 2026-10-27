@@ -82,10 +82,10 @@ test("Manifest V2 合规性与权限最小化校验", () => {
     [...(manifest.network?.allowedHosts || [])].sort(),
     // 出网白名单是全量断言，不是「包含」：多一个域名必须在这里显式加，免得悄悄扩权
     ["api.deepseek.com", "chatgpt.com", "open.er-api.com", "platform.deepseek.com",
-    "console.lithosai.cloud"].sort(),
-    "network.allowedHosts 应恰好是这几家：余额查询（DeepSeek API、Lithos 控制台）与汇率"
+    "console.lithosai.cloud", "open.bigmodel.cn", "api.moonshot.cn", "api.minimaxi.com"].sort(),
+    "network.allowedHosts 只包含现有默认余额服务、Codex、官方账单和汇率；不得放开任意主机"
   );
-  assert.deepEqual(manifest.network?.methods, ["GET"], "network.methods 仅需 GET");
+  assert.deepEqual(manifest.network?.methods, ["GET", "POST"], "network.methods 支持 GET 查询与 POST 核销");
 
   // Settings 校验（迁移至插件内部自管，不在宿主全局设置中注入）
   assert.equal(manifest.contributes.settings, undefined, "插件内部自管设置，不向宿主注入全局 settings 表单");

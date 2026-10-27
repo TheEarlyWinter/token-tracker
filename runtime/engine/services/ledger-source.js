@@ -25,8 +25,8 @@ function emptySource(sourcePath, key, error = null) {
 }
 
 export function loadLedger(homeDir, log = () => {}) {
-  const sqlitePath = path.join(homeDir, "usage-ledger.sqlite");
-  const jsonPath = path.join(homeDir, "usage-ledger.json");
+  const sqlitePath = path.resolve(homeDir, "usage-ledger.sqlite");
+  const jsonPath = path.resolve(homeDir, "usage-ledger.json");
 
   const Driver = loadSqliteDriver();
   if (Driver && fs.existsSync(sqlitePath)) {
@@ -34,7 +34,7 @@ export function loadLedger(homeDir, log = () => {}) {
       const st = fs.statSync(sqlitePath);
       let wal = "";
       try { const w = fs.statSync(sqlitePath + "-wal"); wal = `:${w.mtimeMs}:${w.size}`; } catch {}
-      const key = `sqlite:${st.mtimeMs}:${st.size}${wal}`;
+      const key = `sqlite:${sqlitePath}:${st.mtimeMs}:${st.size}${wal}`;
       if (memo.key === key) return memo.value;
       const db = new Driver(sqlitePath, { readOnly: true });
       let entries = [];
@@ -54,7 +54,7 @@ export function loadLedger(homeDir, log = () => {}) {
   try {
     if (!fs.existsSync(jsonPath)) return emptySource(sqlitePath, "missing");
     const st = fs.statSync(jsonPath);
-    const key = `json:${st.mtimeMs}:${st.size}`;
+    const key = `json:${jsonPath}:${st.mtimeMs}:${st.size}`;
     if (memo.key === key) return memo.value;
     const data = JSON.parse(readTextFile(jsonPath));
     const entries = Array.isArray(data?.entries) ? data.entries : [];

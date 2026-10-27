@@ -83,7 +83,8 @@ test('single-day hourly breakdown populates tokens, cacheRead and handles custom
   const snapshot = engine.getData();
   const d = build(snapshot, '', { from: '2026-10-05', to: '2026-10-05' });
   assert.equal(d.summary.totalTokens, 75);
-  assert.equal(d.summary.totalInput, 50);
+  // input 对外是未命中输入：50 是原始总输入，实际未命中为 40；缓存读单列为 10。
+  assert.equal(d.summary.totalInput, 40);
   assert.equal(d.summary.totalOutput, 25);
   assert.equal(d.hourly.length, 24);
   const h14 = d.hourly.find(h => h.hour === '14');

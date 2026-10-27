@@ -23,11 +23,14 @@ export function createTurnsInspector({
     page: 1,
     pageSize: 50,
     loading: false,
+    error: null,
     data: { rows: [], total: 0, sumTokens: 0, totalPages: 1 },
     // 点开某一行后的逐次调用上下文：
     // { requestId, loading, error, payload } —— 只存一个，再点另一行就替换。
     detail: null,
   };
+  let listRequestSeq = 0;
+  let detailRequestSeq = 0;
 
   function fmtNum(n) {
     return Number(n || 0).toLocaleString();
@@ -42,7 +45,7 @@ export function createTurnsInspector({
   }
 
   function fmtPct(read, uncached) {
-    return hitRateLabel(read, uncached);
+    return hitRateLabel(read, read + uncached);
   }
 
   // 单次调用的估算费用：分币级别的小数字留着四位，不然一排 ¥0.00 什么也看不出来。
@@ -61,8 +64,14 @@ export function createTurnsInspector({
     return (n / 60000).toFixed(1) + "min";
   }
 
+  function clearDetail() {
+    detailRequestSeq += 1;
+    state.detail = null;
+  }
+
   // 读一轮会话的逐次调用。只存最后一次点击的结果，避免连点几十行撑爆内存。
   async function loadDetail(requestId) {
+    const requestSeq = ++detailRequestSeq;
     if (!requestId) {
       state.detail = { requestId: null, loading: false, error: "这一行没有 requestId（旧索引或 SQLite 不可用），拿不到逐次调用", payload: null };
       render();
@@ -73,15 +82,17 @@ export function createTurnsInspector({
     try {
       const res = await fetchFn("/turn?requestId=" + encodeURIComponent(requestId));
       const payload = await res.json();
+      if (requestSeq !== detailRequestSeq || state.detail?.requestId !== requestId) return;
       if (!res.ok || payload?.ok === false) {
         state.detail = { requestId, loading: false, error: payload?.message || payload?.error || "HTTP " + res.status, payload: null };
       } else {
         state.detail = { requestId, loading: false, error: null, payload };
       }
     } catch (e) {
+      if (requestSeq !== detailRequestSeq || state.detail?.requestId !== requestId) return;
       state.detail = { requestId, loading: false, error: e.message || String(e), payload: null };
     } finally {
-      render();
+      if (requestSeq === detailRequestSeq && state.detail?.requestId === requestId) render();
     }
   }
 
@@ -115,10 +126,14 @@ export function createTurnsInspector({
   }
 
   async function fetchTurns() {
+    clearDetail();
+    const requestSeq = ++listRequestSeq;
+    const filters = getFilters();
     state.loading = true;
+    state.error = null;
+    state.data = { rows: [], total: 0, sumTokens: 0, totalPages: 1 };
     render();
     try {
-      const filters = getFilters();
       const params = new URLSearchParams({
         sortKey: state.sortKey,
         order: state.order,
@@ -135,14 +150,23 @@ export function createTurnsInspector({
       });
 
       const res = await fetchFn("/turns?" + params.toString());
-      if (res.ok) {
-        state.data = await res.json();
+      const payload = await res.json();
+      if (requestSeq !== listRequestSeq) return;
+      if (!res.ok || payload?.ok === false) {
+        state.error = payload?.message || payload?.error || "HTTP " + res.status;
+        state.data = { rows: [], total: 0, sumTokens: 0, totalPages: 1 };
+      } else {
+        state.data = payload || { rows: [], total: 0, sumTokens: 0, totalPages: 1 };
       }
     } catch (e) {
-      console.warn("[turns-inspector] fetch turns error:", e);
+      if (requestSeq !== listRequestSeq) return;
+      state.error = e.message || String(e);
+      state.data = { rows: [], total: 0, sumTokens: 0, totalPages: 1 };
     } finally {
-      state.loading = false;
-      render();
+      if (requestSeq === listRequestSeq) {
+        state.loading = false;
+        render();
+      }
     }
   }
 
@@ -196,6 +220,7 @@ export function createTurnsInspector({
     sortSel.onchange = (e) => {
       state.sortKey = e.target.value;
       state.page = 1;
+      clearDetail();
       fetchTurns();
     };
 
@@ -203,6 +228,7 @@ export function createTurnsInspector({
     threshSel.onchange = (e) => {
       state.minTokens = Number(e.target.value);
       state.page = 1;
+      clearDetail();
       fetchTurns();
     };
 
@@ -314,6 +340,8 @@ export function createTurnsInspector({
 
     if (state.loading) {
       tableWrap.innerHTML = `<div class="turns-loading">正在拉取轮次明细数据…</div>`;
+    } else if (state.error) {
+      tableWrap.innerHTML = `<div class="turns-error">${escapeHtml(state.error)}</div>`;
     } else if (!state.data.rows || state.data.rows.length === 0) {
       tableWrap.innerHTML = `<div class="turns-empty">所选条件暂无轮次用量记录</div>`;
     } else {
@@ -372,7 +400,7 @@ export function createTurnsInspector({
         tr.addEventListener("click", () => {
           const rid = tr.getAttribute("data-request-id") || "";
           if (state.detail && state.detail.requestId === rid && !state.detail.error) {
-            state.detail = null; // 再点一次同一条：收起
+            clearDetail(); // 再点一次同一条：收起，并让未完成请求失效
             render();
             return;
           }
@@ -458,7 +486,7 @@ export function createTurnsInspector({
       }
 
       const closeBtn = box.querySelector(".turns-detail-close");
-      if (closeBtn) closeBtn.onclick = () => { state.detail = null; render(); };
+      if (closeBtn) closeBtn.onclick = () => { clearDetail(); render(); };
       card.appendChild(box);
     }
 

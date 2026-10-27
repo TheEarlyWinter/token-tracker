@@ -251,6 +251,8 @@ body {
   flex-direction: column;
   gap: 10px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .sb-codex-card.sb-codex-dim {
@@ -262,6 +264,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 6px;
 }
 
 .sb-codex-title {
@@ -270,11 +274,14 @@ body {
   color: var(--text-tertiary, #71717a);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .sb-codex-badges {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 4px;
 }
 
@@ -287,6 +294,7 @@ body {
   border: 1px solid var(--card-border, #e4e4e7);
   padding: 1px 5px;
   border-radius: 4px;
+  white-space: nowrap;
 }
 
 .sb-codex-credit {
@@ -298,6 +306,264 @@ body {
   border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--card-border));
   padding: 1px 5px;
   border-radius: 4px;
+  white-space: nowrap;
+}
+
+.sb-codex-bal-badge {
+  color: var(--accent, #246b6e);
+  background: color-mix(in srgb, var(--accent, #246b6e) 10%, transparent);
+  border-color: color-mix(in srgb, var(--accent, #246b6e) 25%, transparent);
+  white-space: nowrap;
+}
+
+button.sb-codex-credit-btn {
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  line-height: normal;
+}
+button.sb-codex-credit-btn:hover {
+  background: color-mix(in srgb, var(--accent, #246b6e) 18%, var(--bg-card, #ffffff));
+}
+
+/* Codex 限额重置卡弹窗 (Modal) */
+.sb-codex-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  padding: 16px;
+  box-sizing: border-box;
+  animation: sbModalFadeIn 0.15s ease-out;
+}
+
+@keyframes sbModalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.sb-codex-modal-dialog {
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--card-border, #e4e4e7);
+  border-radius: 10px;
+  width: 100%;
+  max-width: 360px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.sb-codex-modal-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--card-border, #e4e4e7);
+  background: var(--bg-hover, #f8f9fa);
+  box-sizing: border-box;
+}
+
+.sb-codex-modal-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #18181b);
+}
+
+.sb-codex-modal-close {
+  background: none;
+  border: none;
+  font-size: 16px;
+  font-weight: bold;
+  color: var(--text-muted, #71717a);
+  cursor: pointer;
+  padding: 2px 6px;
+  line-height: 1;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+.sb-codex-modal-close:hover {
+  color: var(--text-primary, #18181b);
+  background: var(--card-border, #e4e4e7);
+}
+
+.sb-codex-modal-body {
+  padding: 14px 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: calc(80vh - 50px);
+  scrollbar-width: thin;
+  box-sizing: border-box;
+}
+
+.sb-codex-reset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 320px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+
+.sb-reset-card {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--card-border, #e4e4e7);
+  border-radius: 8px;
+  gap: 6px;
+  box-sizing: border-box;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.sb-reset-card.is-spent {
+  opacity: 0.6;
+}
+
+.sb-reset-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sb-reset-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sb-reset-card-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary, #18181b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sb-reset-card-status-pill {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.sb-reset-card-status-pill.is-avail {
+  color: var(--accent, #246b6e);
+  background: color-mix(in srgb, var(--accent, #246b6e) 12%, transparent);
+}
+.sb-reset-card-status-pill.is-spent {
+  color: var(--text-muted, #71717a);
+  background: var(--bg-hover, #f4f4f5);
+}
+
+.sb-reset-card-sub {
+  font-size: 11px;
+  color: var(--text-muted, #71717a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sb-reset-card-act {
+  margin-top: 4px;
+  width: 100%;
+}
+
+.sb-reset-action-btn {
+  width: 100%;
+  font-size: 11px;
+  padding: 5px 0;
+  background: var(--accent, #246b6e);
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s ease;
+  box-sizing: border-box;
+  font-weight: 500;
+  text-align: center;
+}
+.sb-reset-action-btn:hover {
+  opacity: 0.9;
+}
+.sb-reset-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sb-reset-spent-label {
+  display: block;
+  width: 100%;
+  font-size: 11px;
+  color: var(--text-muted, #71717a);
+  text-align: center;
+  padding: 4px 0;
+}
+
+.sb-reset-confirm-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 8px;
+  background: color-mix(in srgb, var(--accent, #246b6e) 8%, var(--bg-hover, #f4f4f5));
+  border: 1px solid color-mix(in srgb, var(--accent, #246b6e) 20%, transparent);
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+.sb-confirm-yes {
+  font-size: 11px;
+  padding: 2px 10px;
+  background: var(--accent, #246b6e);
+  color: #fff;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sb-confirm-no {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: var(--bg-hover, #f4f4f5);
+  color: var(--text-secondary, #52525b);
+  border: 1px solid var(--card-border, #e4e4e7);
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sb-codex-reset-msg {
+  font-size: 11px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--card-border, #e4e4e7);
+}
+.sb-codex-reset-msg.is-ok {
+  color: var(--accent, #246b6e);
+  border-color: color-mix(in srgb, var(--accent, #246b6e) 30%, transparent);
+}
+.sb-codex-reset-msg.is-err {
+  color: var(--red, #e11d48);
+  border-color: color-mix(in srgb, var(--red, #e11d48) 30%, transparent);
 }
 
 .sb-codex-body {
@@ -2054,6 +2320,53 @@ body {
 .vt.on {
   color: var(--text-primary);
   border-bottom-color: var(--accent);
+}
+
+/* ── 筛选置灰（针对外部平台账单不支持 Agent/类型） ── */
+.cs.cs-disabled-billing {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.cs.cs-disabled-billing .cs-list {
+  display: none !important;
+}
+
+.ls-filter-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.ls-filter-clear {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.ls-filter-clear:hover {
+  color: var(--text-primary);
+}
+
+/* ── 调用明细视图 ── */
+.turns-view {
+  margin-top: 16px;
+}
+
+.turns-view .turns-panel {
+  margin-top: 0;
 }
 
 /* ── LithosAI 消费视图 ── */
