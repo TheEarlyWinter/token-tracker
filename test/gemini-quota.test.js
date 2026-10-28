@@ -556,7 +556,8 @@ test("旧 epoch 的管理失败不能暂停新配置", async () => {
   }
 });
 
-test("最多三账号并发，预算耗尽后不新增请求且未取账号标 timeout", async () => {
+test("最多三账号并发，预算耗尽后不新增请求且未取账号标 timeout", async (t) => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 0 });
   const files = Array.from({ length: 4 }, (_, index) => ({
     provider: "antigravity",
     auth_index: index,
@@ -570,13 +571,16 @@ test("最多三账号并发，预算耗尽后不新增请求且未取账号标 t
     return new Promise(() => {});
   }, { timeoutMs: 40 });
   try {
-    const startedAt = Date.now();
-    const dto = await service.getQuota();
-    assert.ok(Date.now() - startedAt < 500);
+    const quotaPromise = service.getQuota();
+    for (let index = 0; index < 20 && quotaCalls < 3; index++) await Promise.resolve();
+    assert.equal(quotaCalls, 3);
+    t.mock.timers.tick(40);
+    const dto = await quotaPromise;
     assert.equal(quotaCalls, 3);
     assert.equal(dto.accounts.length, 4);
     assert.ok(dto.accounts.every((account) => account.quotaStatus === "timeout"));
   } finally {
     cleanup(dataDir);
+    t.mock.timers.reset();
   }
 });
