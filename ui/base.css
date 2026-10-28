@@ -2909,3 +2909,175 @@ button.sb-codex-credit-btn:hover {
   color: var(--text-primary);
   font-weight: 500;
 }
+
+/* ── Gemini 算力池微卡：纯白、细边框、紧凑分组 ── */
+.gemini-pool-section {
+  box-sizing: border-box;
+}
+
+.gemini-pool-card {
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--card-border, #e4e4e7);
+  border-radius: 8px;
+  padding: 9px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.03));
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.gemini-pool-header,
+.gemini-account-header,
+.gemini-bucket-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.gemini-pool-title {
+  color: var(--text-primary, #18181b);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.gemini-pool-subtitle,
+.gemini-pool-message,
+.gemini-account-empty,
+.gemini-bucket-reset {
+  color: var(--text-tertiary, #71717a);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.gemini-account-count {
+  color: var(--text-tertiary, #71717a);
+  font-size: 10px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.gemini-pool-message {
+  padding: 5px 0 1px;
+}
+
+.gemini-pool-inline-message {
+  padding: 0;
+}
+
+.gemini-accounts {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.gemini-account {
+  border-top: 1px solid var(--divider, #f4f4f5);
+  padding-top: 7px;
+  min-width: 0;
+}
+
+.gemini-account:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.gemini-account-header {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  margin-bottom: 5px;
+}
+
+.gemini-account-label,
+.gemini-bucket-label {
+  color: var(--text-secondary, #52525b);
+  font-size: 10px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gemini-account-label {
+  flex: 1 1 74px;
+  font-weight: 600;
+}
+
+.gemini-status {
+  border: 1px solid var(--card-border, #e4e4e7);
+  border-radius: 4px;
+  padding: 1px 4px;
+  color: var(--text-tertiary, #71717a);
+  font-size: 9px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.gemini-health-status {
+  color: var(--accent, #246b6e);
+}
+
+.gemini-quota-status {
+  color: var(--text-secondary, #52525b);
+}
+
+.gemini-account-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gemini-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gemini-group-label {
+  color: var(--text-tertiary, #71717a);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.gemini-bucket {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.gemini-bucket-label,
+.gemini-bucket-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.gemini-bucket-value {
+  color: var(--text-primary, #18181b);
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.gemini-bucket-track {
+  width: 100%;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--bg-hover, #f4f4f5);
+  overflow: hidden;
+}
+
+.gemini-bucket-fill {
+  height: 100%;
+  min-width: 0;
+  border-radius: inherit;
+  background: var(--accent, #246b6e);
+  transition: width 0.2s ease;
+}
+
+.gemini-bucket-reset {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

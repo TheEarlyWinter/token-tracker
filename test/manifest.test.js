@@ -82,7 +82,7 @@ test("Manifest V2 合规性与权限最小化校验", () => {
     [...(manifest.network?.allowedHosts || [])].sort(),
     // 出网白名单是全量断言，不是「包含」：多一个域名必须在这里显式加，免得悄悄扩权
     ["api.deepseek.com", "chatgpt.com", "open.er-api.com", "platform.deepseek.com",
-    "console.lithosai.cloud", "open.bigmodel.cn", "api.moonshot.cn", "api.minimaxi.com"].sort(),
+    "console.lithosai.cloud", "open.bigmodel.cn", "api.moonshot.cn", "api.minimaxi.com", "cpa.example.invalid"].sort(),
     "network.allowedHosts 只包含现有默认余额服务、Codex、官方账单和汇率；不得放开任意主机"
   );
   assert.deepEqual(manifest.network?.methods, ["GET", "POST"], "network.methods 支持 GET 查询与 POST 核销");

@@ -16,6 +16,7 @@ import { CodexQuotaService } from "../lib/codex-quota.mjs";
 import { DeepSeekBalanceService } from "../lib/deepseek-balance.mjs";
 import { LithosBalanceService, looseCookieValues, monthToDateUtc } from "../lib/lithos-balance.mjs";
 import { DeepSeekUsageService } from "../lib/deepseek-usage.mjs";
+import { GeminiQuotaService } from "../lib/gemini-quota.mjs";
 import { writeFileAtomic } from "../runtime/engine/services/jsonl-log.js";
 import { deriveHanaHome } from "../lib/local-client.mjs";
 const MANIFEST = JSON.parse(fs.readFileSync(new URL('../manifest.json', import.meta.url), 'utf8'));
@@ -286,6 +287,14 @@ export default function (app, ctx) {
     fetchFn: globalThis.fetch,
     network: ctx.network,
     log: ctx.log,
+  });
+
+  const geminiQuotaService = new GeminiQuotaService({
+    dataDir: ctx.dataDir || "",
+    network: ctx.network,
+    fetchFn: globalThis.fetch,
+    ttlMs: 60_000,
+    timeoutMs: 12_000,
   });
 
   // 数据接口处理器
@@ -1106,7 +1115,42 @@ export default function (app, ctx) {
     }));
   };
 
+  const handleGeminiQuota = async (c) => {
+    try {
+      return c.json(await geminiQuotaService.getQuota());
+    } catch {
+      return c.json({ ok: false, code: "GEMINI_QUOTA_ERROR" }, 503);
+    }
+  };
+
+  const handleGeminiQuotaConfigGet = (c) => c.json(geminiQuotaService.getConfig());
+
+  const handleGeminiQuotaConfigPost = async (c) => {
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ ok: false, code: "INVALID_INPUT" }, 400);
+    }
+    let result;
+    try {
+      result = await geminiQuotaService.saveConfig(body && typeof body === "object" ? body : {});
+    } catch {
+      return c.json({ ok: false, code: "GEMINI_QUOTA_CONFIG_ERROR" }, 503);
+    }
+    if (result.ok) return c.json(result);
+    const status = result.code === "INVALID_INPUT" ? 400 : 503;
+    return c.json({ ok: false, code: result.code || "GEMINI_QUOTA_CONFIG_ERROR" }, status);
+  };
+
   // 路由挂载（同时兼容 /dashboard/* 与标准根路由）
+  app.get("/dashboard/gemini-quota", handleGeminiQuota);
+  app.get("/gemini-quota", handleGeminiQuota);
+  app.get("/dashboard/gemini-quota/config", handleGeminiQuotaConfigGet);
+  app.get("/gemini-quota/config", handleGeminiQuotaConfigGet);
+  app.post("/dashboard/gemini-quota/config", handleGeminiQuotaConfigPost);
+  app.post("/gemini-quota/config", handleGeminiQuotaConfigPost);
+
   app.get("/dashboard/data", handleData);
   app.get("/data", handleData);
   app.get("/status", c => c.json(trackerStatus(ctx._tokenCache)));

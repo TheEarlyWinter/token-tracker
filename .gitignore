@@ -24,6 +24,7 @@ app-data/
 *-console.json
 *-platform.json
 balance-apis.json
+gemini-cpa.json
 credentials*.json
 .env
 .env.*

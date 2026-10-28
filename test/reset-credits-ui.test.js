@@ -492,7 +492,12 @@ function loadFunctionPanelHarness() {
   let source = fs.readFileSync(sourcePath, "utf8");
   source = source.replace(/^import[^\n]*\n/gm, "");
   source = source.replace(/^export\s+/gm, "");
-  source = source.replace(/\nif \(typeof window !== "undefined"\) \{\s*initFunctionPanel\(\);\s*\}\s*$/m, "");
+  const bootstrapSentinel = 'if (typeof window !== "undefined") {';
+  const bootstrapStart = source.lastIndexOf(bootstrapSentinel);
+  assert.ok(bootstrapStart >= 0, "function-panel bootstrap sentinel must remain at the end");
+  const bootstrapClose = source.indexOf("\n}", bootstrapStart);
+  assert.ok(bootstrapClose > bootstrapStart, "function-panel bootstrap block must have a closing brace");
+  source = source.slice(0, bootstrapStart) + source.slice(bootstrapClose + 2);
   source += "\nthis.__panelExports = { loadAndRender };\n";
 
   const elements = new Map();

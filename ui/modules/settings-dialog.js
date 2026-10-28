@@ -16,7 +16,7 @@ function getSettingsBroadcastChannel() {
   return settingsBc;
 }
 
-export function initSettingsDialog({ onThemeChange, onSettingsSaved, fetchFn } = {}) {
+export function initSettingsDialog({ onThemeChange, onSettingsSaved, onGeminiConfigChanged, fetchFn } = {}) {
   const btn = document.getElementById("st-btn");
   const panel = document.getElementById("set-panel");
   const shade = document.getElementById("set-shade");
@@ -33,6 +33,10 @@ export function initSettingsDialog({ onThemeChange, onSettingsSaved, fetchFn } =
   const dsKeyInput = document.getElementById("set-ds-key");
   const dsSave = document.getElementById("set-ds-save");
   const dsStatus = document.getElementById("set-ds-status");
+  const geminiKeyInput = document.getElementById("set-gemini-key");
+  const geminiSave = document.getElementById("set-gemini-save");
+  const geminiClear = document.getElementById("set-gemini-clear");
+  const geminiStatus = document.getElementById("set-gemini-status");
 
   let currentSettings = { scanInterval: 60, highUsageThreshold: 30000, showCodexQuota: true, showDeepseekBalance: true };
   let inFlightPromise = null;
@@ -72,6 +76,86 @@ export function initSettingsDialog({ onThemeChange, onSettingsSaved, fetchFn } =
     if (!dsStatus) return;
     dsStatus.textContent = text;
     dsStatus.style.color = isError ? "var(--orange)" : "var(--text-tertiary)";
+  }
+
+  function setGeminiStatus(text, isError = false) {
+    if (!geminiStatus) return;
+    geminiStatus.textContent = text;
+    geminiStatus.style.color = isError ? "var(--orange)" : "var(--text-tertiary)";
+  }
+
+  async function loadGeminiConfig() {
+    if (typeof fetchFn !== "function" || !geminiStatus) return;
+    try {
+      const res = await fetchFn("/gemini-quota/config");
+      const data = await res.json();
+      if (!res.ok || !data || typeof data.configured !== "boolean") throw new Error("config_status_unavailable");
+      const baseUrl = typeof data.baseUrl === "string" ? data.baseUrl : "";
+      setGeminiStatus(data.configured
+        ? `已配置 · ${baseUrl || "指定 CPA 主机"}`
+        : `未配置${baseUrl ? ` · ${baseUrl}` : ""}`);
+    } catch {
+      setGeminiStatus("安全状态暂不可用", true);
+    }
+  }
+
+  async function submitGeminiConfig(action, managementKey = "") {
+    if (typeof fetchFn !== "function") return;
+    const buttons = [geminiSave, geminiClear].filter(Boolean);
+    buttons.forEach((button) => { button.disabled = true; });
+    setGeminiStatus(action === "clear" ? "正在清空…" : "正在保存…");
+    try {
+      const payload = action === "clear" ? { action: "clear" } : { action: "save", managementKey };
+      const res = await fetchFn("/gemini-quota/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      let data = null;
+      try { data = await res.json(); } catch {}
+      if (!res.ok || !data || typeof data.configured !== "boolean") throw new Error("gemini_config_failed");
+      if (geminiKeyInput) geminiKeyInput.value = "";
+      const baseUrl = typeof data.baseUrl === "string" ? data.baseUrl : "";
+      setGeminiStatus(data.configured
+        ? `已配置 · ${baseUrl || "指定 CPA 主机"}`
+        : `未配置${baseUrl ? ` · ${baseUrl}` : ""}`);
+      const configured = data.configured === true;
+      try {
+        getSettingsBroadcastChannel()?.postMessage({ type: "tt-gemini-config-updated", action, configured });
+      } catch {}
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem("tt-gemini-config-tick", `${action}:${configured ? "1" : "0"}:${Date.now()}`);
+        }
+      } catch {}
+      try {
+        if (typeof window !== "undefined" && window.parent) {
+          window.parent.postMessage({ type: "tt-gemini-config-updated", action, configured }, "*");
+        }
+      } catch {}
+      if (typeof onGeminiConfigChanged === "function") onGeminiConfigChanged(action, data);
+    } catch {
+      setGeminiStatus(action === "clear" ? "清空失败，请重试" : "保存失败，请重试", true);
+    } finally {
+      buttons.forEach((button) => { button.disabled = false; });
+    }
+  }
+
+  if (geminiSave) {
+    geminiSave.onclick = async () => {
+      const managementKey = geminiKeyInput?.value?.trim() || "";
+      if (!managementKey) {
+        setGeminiStatus("请输入管理密钥", true);
+        return;
+      }
+      await submitGeminiConfig("save", managementKey);
+    };
+  }
+
+  if (geminiClear) {
+    geminiClear.onclick = async () => {
+      await submitGeminiConfig("clear");
+    };
   }
 
   // DeepSeek 余额卡消失最常见的原因：宿主里删掉了 DeepSeek 供应商，凭据跟着没了。
@@ -203,6 +287,7 @@ export function initSettingsDialog({ onThemeChange, onSettingsSaved, fetchFn } =
     if (panel) panel.style.display = "";
     loadLithosStatus();
     loadDsStatus();
+    loadGeminiConfig();
     loadSettingsData();
   }
 

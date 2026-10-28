@@ -22,6 +22,7 @@ import { createLithosSpend } from "./modules/lithos-spend.js";
 import { createDeepSeekUsage } from "./modules/deepseek-usage.js";
 import { showResetCreditsModal } from "./modules/reset-credits-modal.js";
 import { createModelRouting } from "./modules/model-routing.js";
+import { createGeminiQuotaController } from "./modules/gemini-card.js";
 
 (function(){
 "use strict";
@@ -51,7 +52,7 @@ function trackerFetch(endpoint, options) {
 }
 
 var _status = null, _viewError = false, _loadSequence = 0, _statusTimer = null, _closed = false;
-var _lithosSpend = null, _dsUsage = null, _modelRouting = null, _activeView = "usage";
+var _lithosSpend = null, _dsUsage = null, _modelRouting = null, _geminiPool = null, _activeView = "usage";
 var D, R = "today", tc, mc, ac, _allAgents = null, _allModels = null, _allProviders = null, _selAgent = "", _selModel = "", _selProvider = "", _selType = "", _selBalance = "deepseek", _provNames = null, _modelProv = "", _provRowHtml = "", _fxRate = null, _dispCur = "CNY";
 (function(){ try{_provNames=JSON.parse(localStorage.getItem("tt-prov-names")||"{}");}catch(e){_provNames={};} })();
 
@@ -357,6 +358,7 @@ $("app").innerHTML =
   '<span class="cs" id="stype"><span class="cs-txt">类型</span><span class="cs-arw">▾</span><div class="cs-list"><div class="cs-opt sel" data-v="">全部</div><div class="cs-opt" data-v="desktop">聊天</div><div class="cs-opt" data-v="channel">频道</div><div class="cs-opt" data-v="code">Code</div></div></span>'+
   '</div>'+
   '<div id="fx" class="fx-side" style="display:none"></div>'+
+  '<div id="gemini-pool-section" class="sidebar-section gemini-pool-section" style="display:none"><div class="sidebar-divider"></div><div class="sidebar-label">Gemini 算力池</div><div id="gemini-card-slot"></div></div>'+
   '</div>'+
   '<div class="main-area">'+
   '<div class="archive-intro"><span>PERSONAL USAGE ARCHIVE / 01</span><p>把每一次调用，放回工作流里看。</p></div>'+
@@ -383,7 +385,7 @@ $("app").innerHTML =
   '<div id="ld" class="ld">翻阅档案…</div>'+
   '</div>'+
   '</div>'+
-  '<div class="set-shade" id="set-shade" style="display:none"></div><div class="set-panel" id="set-panel" style="display:none"><div class="set-hdr"><span>设置</span><div style="display:flex;gap:8px;align-items:center"><button class="btn" id="set-save">保存</button><button class="btn" id="set-close">✕</button></div></div><div class="set-body"><div class="set-sec"><div class="set-sec-title">外观</div><div class="set-theme-row" id="set-theme"><button class="set-theme-opt" data-v="auto">跟随系统</button><button class="set-theme-opt" data-v="light">浅色</button><button class="set-theme-opt" data-v="dark">深色</button></div></div><div class="set-sec"><div class="set-sec-title">同步与阈值</div><div class="set-form-group"><label class="set-label" for="set-scan-interval"><span>扫描间隔（秒）</span><span class="set-hint">后台同步频率 (≥5s)</span></label><input type="number" class="set-input" id="set-scan-interval" min="5" max="3600" step="1" value="60"></div><div class="set-form-group"><label class="set-label" for="set-high-usage"><span>高消耗阈值 (Tokens)</span><span class="set-hint">单轮/会话标记阈值</span></label><input type="number" class="set-input" id="set-high-usage" min="0" step="1000" value="30000"></div></div><div class="set-sec"><div class="set-sec-title">侧边功能面板</div><div class="set-form-group"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:12px;font-weight:500;color:var(--text-primary)">Codex 额度</div><div class="set-hint">在左侧功能面板展示 5h / 每周配额微卡</div></div><input type="checkbox" id="set-show-codex" style="width:16px;height:16px;cursor:pointer;accent-color:var(--text-primary)" checked></div></div><div class="set-form-group"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:12px;font-weight:500;color:var(--text-primary)">DeepSeek 余额</div><div class="set-hint">在左侧功能面板展示官方 API 余额微卡</div></div><input type="checkbox" id="set-show-deepseek" style="width:16px;height:16px;cursor:pointer;accent-color:var(--text-primary)" checked></div></div><div class="set-sec"><div class="set-sec-title">DeepSeek 余额</div><div class="set-form-group"><label class="set-label" for="set-ds-key"><span>API Key</span><span class="set-hint">只用于查余额；填了就不依赖宿主里是否配了 DeepSeek 供应商</span></label><input type="password" class="set-input" id="set-ds-key" placeholder="sk-…" autocomplete="off"></div><div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap"><button type="button" class="btn btn-outline" id="set-ds-save">保存并查询</button><span class="set-hint" id="set-ds-status"></span></div></div><div class="set-sec"><div class="set-sec-title">LithosAI 余额</div><div class="set-form-group"><label class="set-label" for="set-lithos-cookie"><span>控制台 Cookie</span><span class="set-hint">浏览器登录 console.lithosai.cloud → 开发者工具 → 请求头里复制整行 Cookie</span></label><input type="password" class="set-input" id="set-lithos-cookie" placeholder="__Host-console_session=…; __Host-console_csrf=…" autocomplete="off"></div><div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap"><button type="button" class="btn btn-outline" id="set-lithos-save">保存并查询</button><span class="set-hint" id="set-lithos-status"></span></div></div><div id="set-msg" class="set-feedback" style="display:none"></div></div></div></div>';
+  '<div class="set-shade" id="set-shade" style="display:none"></div><div class="set-panel" id="set-panel" style="display:none"><div class="set-hdr"><span>设置</span><div style="display:flex;gap:8px;align-items:center"><button class="btn" id="set-save">保存</button><button class="btn" id="set-close">✕</button></div></div><div class="set-body"><div class="set-sec"><div class="set-sec-title">外观</div><div class="set-theme-row" id="set-theme"><button class="set-theme-opt" data-v="auto">跟随系统</button><button class="set-theme-opt" data-v="light">浅色</button><button class="set-theme-opt" data-v="dark">深色</button></div></div><div class="set-sec"><div class="set-sec-title">同步与阈值</div><div class="set-form-group"><label class="set-label" for="set-scan-interval"><span>扫描间隔（秒）</span><span class="set-hint">后台同步频率 (≥5s)</span></label><input type="number" class="set-input" id="set-scan-interval" min="5" max="3600" step="1" value="60"></div><div class="set-form-group"><label class="set-label" for="set-high-usage"><span>高消耗阈值 (Tokens)</span><span class="set-hint">单轮/会话标记阈值</span></label><input type="number" class="set-input" id="set-high-usage" min="0" step="1000" value="30000"></div></div><div class="set-sec"><div class="set-sec-title">侧边功能面板</div><div class="set-form-group"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:12px;font-weight:500;color:var(--text-primary)">Codex 额度</div><div class="set-hint">在左侧功能面板展示 5h / 每周配额微卡</div></div><input type="checkbox" id="set-show-codex" style="width:16px;height:16px;cursor:pointer;accent-color:var(--text-primary)" checked></div></div><div class="set-form-group"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:12px;font-weight:500;color:var(--text-primary)">DeepSeek 余额</div><div class="set-hint">在左侧功能面板展示官方 API 余额微卡</div></div><input type="checkbox" id="set-show-deepseek" style="width:16px;height:16px;cursor:pointer;accent-color:var(--text-primary)" checked></div></div><div class="set-sec"><div class="set-sec-title">DeepSeek 余额</div><div class="set-form-group"><label class="set-label" for="set-ds-key"><span>API Key</span><span class="set-hint">只用于查余额；填了就不依赖宿主里是否配了 DeepSeek 供应商</span></label><input type="password" class="set-input" id="set-ds-key" placeholder="sk-…" autocomplete="off"></div><div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap"><button type="button" class="btn btn-outline" id="set-ds-save">保存并查询</button><span class="set-hint" id="set-ds-status"></span></div></div><div class="set-sec"><div class="set-sec-title">LithosAI 余额</div><div class="set-form-group"><label class="set-label" for="set-lithos-cookie"><span>控制台 Cookie</span><span class="set-hint">浏览器登录 console.lithosai.cloud → 开发者工具 → 请求头里复制整行 Cookie</span></label><input type="password" class="set-input" id="set-lithos-cookie" placeholder="__Host-console_session=…; __Host-console_csrf=…" autocomplete="off"></div><div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap"><button type="button" class="btn btn-outline" id="set-lithos-save">保存并查询</button><span class="set-hint" id="set-lithos-status"></span></div></div><div class="set-sec"><div class="set-sec-title">Gemini 算力池</div><div class="set-form-group"><label class="set-label" for="set-gemini-key"><span>CPA 管理密钥</span><span class="set-hint">仅保存到 App 安全配置，不回填、不显示</span></label><input type="password" class="set-input" id="set-gemini-key" placeholder="输入管理密钥" autocomplete="off"></div><div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap"><button type="button" class="btn btn-outline" id="set-gemini-save">保存</button><button type="button" class="btn btn-outline" id="set-gemini-clear">清空</button><span class="set-hint" id="set-gemini-status"></span></div></div><div id="set-msg" class="set-feedback" style="display:none"></div></div></div></div>';
 
 function load(refreshFirst) {
   var sequence = ++_loadSequence;
@@ -476,6 +478,7 @@ async function pollStatus() {
 
 function refresh() {
   _lastTurnsFilterKey = null;
+  if (_geminiPool) _geminiPool.refresh();
   if (_activeView === "model-routing" && _modelRouting) {
     _modelRouting.refresh();
     return;
@@ -899,10 +902,30 @@ function renderConsumption(){
 
 function escHTML(s){if(!s)return'';return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 
+function initGeminiPool() {
+  var slot = $("gemini-card-slot");
+  if (!slot) return null;
+  _geminiPool = createGeminiQuotaController({
+    container: slot,
+    fetchFn: trackerFetch,
+  });
+  _geminiPool.load();
+  return _geminiPool;
+}
+
 $("rf").onclick = refresh;
 var thBtn = $("th-btn");
 if (thBtn) thBtn.onclick = function() { toggleTheme({ onThemeChange: function() { if (D) render(); } }); };
-initSettingsDialog({ fetchFn: trackerFetch, onThemeChange: function() { if (D) render(); } });
+initSettingsDialog({
+  fetchFn: trackerFetch,
+  onThemeChange: function() { if (D) render(); },
+  onGeminiConfigChanged: function(action, data) {
+    if (_geminiPool) _geminiPool.reload({
+      hide: action === "clear",
+      configured: typeof data?.configured === "boolean" ? data.configured : undefined,
+    });
+  },
+});
 document.querySelectorAll(".fb").forEach(b => {
   b.onclick = function() { R = this.dataset.r; document.querySelectorAll(".fb").forEach(x => x.classList.toggle("act", x.dataset.r === R)); _selAgent=""; _selModel=""; _selProvider=""; syncDateInputs(); load(); };
 });
@@ -980,6 +1003,13 @@ function getQuotaBroadcastChannel() {
       }
       quotaBc.addEventListener("message", function(e) {
         var message = e.data;
+        if (message?.type === "tt-gemini-config-updated") {
+          if (_geminiPool) _geminiPool.reload({
+            hide: message.action === "clear",
+            configured: typeof message.configured === "boolean" ? message.configured : message.action === "save",
+          });
+          return;
+        }
         if (message?.type !== "open-reset-credits-modal") return;
         var requestId = message?.requestId;
         if (!requestId || document.hidden === true || _closed) return;
@@ -1041,9 +1071,15 @@ function refreshQuota() {
     })
     .catch(function(){});
 }
-var quotaTimer=setInterval(function(){ refreshQuota(); }, 60000);
+var quotaTimer=setInterval(function(){
+  refreshQuota();
+  if (_geminiPool) _geminiPool.refresh();
+}, 60000);
 document.addEventListener("visibilitychange", function(){
-  if (!document.hidden) refreshQuota();
+  if (!document.hidden) {
+    refreshQuota();
+    if (_geminiPool) _geminiPool.refresh();
+  }
 });
 
 $("copy-diagnostic").onclick=async function(){
@@ -1053,10 +1089,11 @@ $("copy-diagnostic").onclick=async function(){
     $("copy-result").textContent=result.ok?"已复制":result.reason==="permission_denied"?"未获剪贴板写入授权，请在插件权限入口授权。":"复制不可用，请选择上方摘要手动复制。";
   } catch { $("copy-result").textContent="复制不可用，请选择上方摘要手动复制。"; }
 };
-window.addEventListener("pagehide",function(){_closed=true;clearTimeout(_statusTimer);clearInterval(quotaTimer);});
+window.addEventListener("pagehide",function(){_closed=true;clearTimeout(_statusTimer);clearInterval(quotaTimer);_geminiPool?.dispose();});
 syncDateInputs();
 initViewTabs();
 getQuotaBroadcastChannel();
+initGeminiPool();
 load(false);
 pollStatus();
 })();

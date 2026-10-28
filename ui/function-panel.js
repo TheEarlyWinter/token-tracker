@@ -2,10 +2,15 @@
 import { renderCodexQuotaCard } from "./modules/codex-card.js";
 import { renderDeepSeekCard } from "./modules/deepseek-card.js";
 import { renderLithosCard } from "./modules/lithos-card.js";
+import { createGeminiQuotaController } from "./modules/gemini-card.js";
 import { hana } from "./assets/sdk.js";
 
 // 常驻顶层 BroadcastChannel 引用，防止局部变量被垃圾回收 (GC) 导致监听器失效
 let panelBc = null;
+let geminiPool = null;
+let geminiPending = false;
+let panelShowCodex = true;
+let panelShowDeepseek = true;
 const RESET_MODAL_WAIT_MS = 400;
 function getPanelBroadcastChannel() {
   if (typeof BroadcastChannel === "undefined") return null;
@@ -26,6 +31,60 @@ function getAppApiBase() {
     return p.split("/routes")[0] + "/routes";
   }
   return "/api/apps/token-tracker/routes";
+}
+
+function fetchPanelApi(endpoint, options) {
+  if (window.hana?.api?.fetch) return window.hana.api.fetch(endpoint, options);
+  return fetch(`${getAppApiBase()}${endpoint}`, options);
+}
+
+function updatePanelEmptyNotice() {
+  const emptyNotice = document.getElementById("fp-empty-notice");
+  if (!emptyNotice) return;
+  const codexSection = document.getElementById("fp-codex-section");
+  const dsSection = document.getElementById("fp-deepseek-section");
+  const lithosSection = document.getElementById("fp-lithos-section");
+  const geminiSection = document.getElementById("fp-gemini-section");
+  if (geminiPending) {
+    emptyNotice.style.display = "none";
+    return;
+  }
+  const hasVisibleSection = [codexSection, dsSection, lithosSection, geminiSection]
+    .some((section) => section && section.style.display !== "none");
+  if (hasVisibleSection) {
+    emptyNotice.style.display = "none";
+    return;
+  }
+  emptyNotice.style.display = "";
+  const quietEl = emptyNotice.querySelector(".sb-codex-quiet");
+  if (quietEl) {
+    quietEl.textContent = (!panelShowCodex && !panelShowDeepseek)
+      ? "已在设置中关闭功能面板卡片"
+      : "暂无可展示的卡片（可前往设置开启或配置）";
+  }
+}
+
+function ensureGeminiPool() {
+  if (geminiPool) return geminiPool;
+  const slot = document.getElementById("gemini-card-slot");
+  if (!slot) return null;
+  geminiPool = createGeminiQuotaController({
+    container: slot,
+    fetchFn: fetchPanelApi,
+    onRendered: () => {
+      geminiPending = false;
+      updatePanelEmptyNotice();
+    },
+  });
+  return geminiPool;
+}
+
+function loadGeminiPool({ reload = false, hide = false, configured } = {}) {
+  const controller = ensureGeminiPool();
+  if (!controller) return Promise.resolve(null);
+  geminiPending = true;
+  updatePanelEmptyNotice();
+  return reload ? controller.reload({ hide, configured }) : controller.load();
 }
 
 async function fetchSettings() {
@@ -120,19 +179,20 @@ async function fetchDeepSeekBalance(force = false) {
 export async function loadAndRender(force = false, directSettings = null) {
   const codexSection = document.getElementById("fp-codex-section");
   const dsSection = document.getElementById("fp-deepseek-section");
-  const emptyNotice = document.getElementById("fp-empty-notice");
   const codexSlot = document.getElementById("codex-card-slot");
   const dsSlot = document.getElementById("deepseek-card-slot");
-  const lithosSection = document.getElementById("fp-lithos-section");
   const lithosSlot = document.getElementById("lithos-card-slot");
   const refreshBtn = document.getElementById("fp-refresh");
   if (refreshBtn) refreshBtn.disabled = true;
+  void loadGeminiPool();
 
   try {
     // 若外部传入了即时设置对象（如广播通知或本地存储缓存），优先直接使用，不等网络回包即完成毫秒级 UI 切换
     const settings = directSettings || await fetchSettings();
     const showCodex = settings?.showCodexQuota !== false;
     const showDeepseek = settings?.showDeepseekBalance !== false;
+    panelShowCodex = showCodex;
+    panelShowDeepseek = showDeepseek;
 
     if (codexSection) {
       codexSection.style.display = showCodex ? "" : "none";
@@ -140,9 +200,7 @@ export async function loadAndRender(force = false, directSettings = null) {
     if (dsSection && !showDeepseek) {
       dsSection.style.display = "none";
     }
-    if (emptyNotice) {
-      emptyNotice.style.display = (!showCodex && !showDeepseek) ? "" : "none";
-    }
+    updatePanelEmptyNotice();
 
     const tasks = [];
     if (showCodex) {
@@ -226,21 +284,7 @@ export async function loadAndRender(force = false, directSettings = null) {
       }
     }
 
-    const hasVisibleSection = (codexSection && codexSection.style.display !== "none") ||
-                              (dsSection && dsSection.style.display !== "none") ||
-                              (lithosSection && lithosSection.style.display !== "none");
-    if (emptyNotice) {
-      if (!hasVisibleSection) {
-        emptyNotice.style.display = "";
-        const noticeText = (!showCodex && !showDeepseek)
-          ? "已在设置中关闭功能面板卡片"
-          : "暂无可展示的卡片（可前往设置开启或配置）";
-        const quietEl = emptyNotice.querySelector(".sb-codex-quiet");
-        if (quietEl) quietEl.textContent = noticeText;
-      } else {
-        emptyNotice.style.display = "none";
-      }
-    }
+    updatePanelEmptyNotice();
   } finally {
     if (refreshBtn) refreshBtn.disabled = false;
   }
@@ -269,6 +313,10 @@ export async function initFunctionPanel() {
           loadAndRender(false, event.data?.settings || null);
         } else if (event.data?.type === "tt-quota-updated") {
           loadAndRender(false);
+        } else if (event.data?.type === "tt-gemini-config-updated") {
+          const action = event.data?.action;
+          const configured = typeof event.data?.configured === "boolean" ? event.data.configured : action === "save";
+          void loadGeminiPool({ reload: true, hide: action === "clear", configured });
         }
       };
     }
@@ -285,6 +333,11 @@ export async function initFunctionPanel() {
         loadAndRender(false, cachedSettings);
       } else if (e.key === "tt-quota-tick") {
         loadAndRender(false);
+      } else if (e.key === "tt-gemini-config-tick") {
+        const parts = String(e.newValue || "").split(":");
+        const action = parts[0];
+        const configured = parts[1] === "1" || action === "save";
+        void loadGeminiPool({ reload: true, hide: action === "clear", configured });
       }
     });
   } catch {}
@@ -295,6 +348,10 @@ export async function initFunctionPanel() {
         loadAndRender(false, e.data?.settings || null);
       } else if (e.data?.type === "tt-quota-updated") {
         loadAndRender(false);
+      } else if (e.data?.type === "tt-gemini-config-updated") {
+        const action = e.data?.action;
+        const configured = typeof e.data?.configured === "boolean" ? e.data.configured : action === "save";
+        void loadGeminiPool({ reload: true, hide: action === "clear", configured });
       }
     });
   } catch {}
@@ -326,5 +383,6 @@ export async function initFunctionPanel() {
 }
 
 if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", () => geminiPool?.dispose(), { once: true });
   initFunctionPanel();
 }
