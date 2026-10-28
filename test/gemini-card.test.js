@@ -322,9 +322,11 @@ test("看板不再重复挂载 Gemini 卡，Function Panel 独立接入共享卡
   assert.match(panelHtml, /id="gemini-card-slot"/);
   assert.match(settings, /gemini-quota\/config/);
   assert.match(settings, /set-gemini-key/);
+  // 网关地址字段在设置面板的静态 HTML 里（dashboard-app.js），逻辑与状态文案在 settings 里。
+  assert.match(dashboard, /id="set-gemini-base"/);
+  assert.match(dashboard, /network\.allowedHosts/);
   assert.match(settings, /set-gemini-base/);
   assert.match(settings, /网关地址/);
-  assert.match(settings, /network\.allowedHosts/);
   assert.match(settings, /set-gemini-save/);
   assert.match(settings, /set-gemini-clear/);
   assert.match(settings, /managementKey/);
@@ -334,13 +336,18 @@ test("看板不再重复挂载 Gemini 卡，Function Panel 独立接入共享卡
 test("设置和面板不把管理密钥写入 localStorage、日志或任意 URL", () => {
   const panel = fs.readFileSync(path.join(root, "ui", "function-panel.js"), "utf8");
   const settings = fs.readFileSync(path.join(root, "ui", "modules", "settings-dialog.js"), "utf8");
+  // 网关地址输入框现在写死在设置面板的静态 HTML 里（ui/dashboard-app.js），
+  // 所以占位提示和 allowedHosts 的说明也一起搬到那边去了，断言跟着走。
+  const dashboard = fs.readFileSync(path.join(root, "ui", "dashboard-app.js"), "utf8");
   const combined = `${panel}\n${settings}`;
 
   assert.doesNotMatch(combined, /localStorage\.(setItem|getItem)\([^)]*managementKey/i);
   assert.doesNotMatch(combined, /console\.(log|debug|info|warn|error)\([^)]*managementKey/i);
   // 前端不得内置任何真实 CPA 主机（只允许 https://… 这类占位提示）
   assert.doesNotMatch(combined, /https?:\/\/[a-z0-9-]+(?:\.[a-z0-9-]+)+/i);
-  assert.match(combined, /https:\/\/…/);
+  assert.match(dashboard, /https:\/\/…/);
+  assert.match(dashboard, /id="set-gemini-base"/);
+  assert.match(dashboard, /network\.allowedHosts/);
   assert.match(combined, /tt-gemini-config-tick/);
   assert.match(combined, /action:\s*["'](?:save|clear)["']/);
 });

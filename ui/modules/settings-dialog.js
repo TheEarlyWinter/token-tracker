@@ -85,20 +85,10 @@ export function initSettingsDialog({ onThemeChange, onSettingsSaved, onGeminiCon
     geminiStatus.style.color = isError ? "var(--orange)" : "var(--text-tertiary)";
   }
 
-  // 网关地址既可以在静态 HTML 里写死，也可以在运行时补上；找到就不重复插入。
+  // 网关地址输入框写死在设置面板的静态 HTML 里（ui/dashboard-app.js）；
+  // 这里只做查找，不再运行时插 DOM——注入出来的字段在卡片重渲染后容易丢。
   function ensureGeminiBaseInput() {
     if (typeof document === "undefined") return null;
-    const existing = document.getElementById("set-gemini-base");
-    if (existing) return existing;
-    const anchor = document.getElementById("set-gemini-key");
-    const group = anchor?.parentElement ?? null;
-    const host = group?.parentElement ?? null;
-    if (!group || !host || typeof document.createElement !== "function") return null;
-    const wrapper = document.createElement("div");
-    wrapper.className = "set-form-group";
-    wrapper.innerHTML = '<label class="set-label" for="set-gemini-base"><span>网关地址</span><span class="set-hint">CPA 网关根地址，需与 network.allowedHosts 一致</span></label><input type="url" class="set-input" id="set-gemini-base" placeholder="https://…" autocomplete="off" spellcheck="false">';
-    if (typeof group.after === "function") group.after(wrapper);
-    else host.appendChild(wrapper);
     return document.getElementById("set-gemini-base");
   }
 
