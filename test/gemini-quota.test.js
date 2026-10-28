@@ -44,7 +44,7 @@ function quotaPayload() {
 async function configuredService(fetchFn, options = {}) {
   const dataDir = tempDir();
   const service = new GeminiQuotaService({ dataDir, fetchFn, ...options });
-  const saved = await service.saveConfig({ action: "save", managementKey: "synthetic-management-key" });
+  const saved = await service.saveConfig({ action: "save", managementKey: "synthetic-management-key", baseUrl: CPA_BASE_URL });
   assert.equal(saved.ok, true);
   return { dataDir, service };
 }
@@ -61,7 +61,7 @@ test("未配置时返回严格安全 DTO 且零出网", async () => {
     fetchFn: async () => { calls++; throw new Error("network must not run"); },
   });
   try {
-    assert.deepEqual(service.getConfig(), { configured: false, baseUrl: CPA_BASE_URL });
+    assert.deepEqual(service.getConfig(), { configured: false, baseUrl: CPA_BASE_URL, baseUrlConfigured: false });
     assert.deepEqual(await service.getQuota(), {
       configured: false,
       connected: false,
@@ -80,16 +80,19 @@ test("保存与清空只返回安全状态，文件权限固定为 0600 且 clea
   const service = new GeminiQuotaService({ dataDir, fetchFn: async () => response(200, {}) });
   const secret = "synthetic-management-key";
   try {
-    const saved = await service.saveConfig({ action: "save", managementKey: secret });
+    const saved = await service.saveConfig({ action: "save", managementKey: secret, baseUrl: CPA_BASE_URL });
     assert.equal(saved.ok, true);
     assert.equal(saved.configured, true);
     assert.equal(saved.baseUrl, CPA_BASE_URL);
+    assert.equal(saved.baseUrlConfigured, true);
     assert.doesNotMatch(JSON.stringify(saved), /synthetic-management-key/);
 
     const configPath = path.join(dataDir, "gemini-cpa.json");
     assert.equal(fs.statSync(configPath).mode & 0o777, 0o600);
-    assert.equal(JSON.parse(fs.readFileSync(configPath, "utf8")).managementKey, secret);
-    assert.deepEqual(service.getConfig(), { configured: true, baseUrl: CPA_BASE_URL });
+    const rawConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    assert.equal(rawConfig.managementKey, secret);
+    assert.equal(rawConfig.baseUrl, CPA_BASE_URL);
+    assert.deepEqual(service.getConfig(), { configured: true, baseUrl: CPA_BASE_URL, baseUrlConfigured: true });
 
     const invalid = await service.saveConfig({ action: "save", managementKey: "" });
     assert.equal(invalid.ok, false);
@@ -99,9 +102,10 @@ test("保存与清空只返回安全状态，文件权限固定为 0600 且 clea
     const cleared = await service.saveConfig({ action: "clear" });
     assert.equal(cleared.ok, true);
     assert.equal(cleared.configured, false);
+    assert.equal(cleared.baseUrlConfigured, false);
     assert.equal(fs.existsSync(configPath), true);
     assert.deepEqual(JSON.parse(fs.readFileSync(configPath, "utf8")), {});
-    assert.deepEqual(service.getConfig(), { configured: false, baseUrl: CPA_BASE_URL });
+    assert.deepEqual(service.getConfig(), { configured: false, baseUrl: CPA_BASE_URL, baseUrlConfigured: false });
   } finally {
     cleanup(dataDir);
   }
@@ -277,13 +281,13 @@ test("优先使用 network.fetch，fetchFn 回退时带 AbortSignal、redirect �
     },
   });
   try {
-    await networkService.saveConfig({ action: "save", managementKey: "network-key" });
+    await networkService.saveConfig({ action: "save", managementKey: "network-key", baseUrl: CPA_BASE_URL });
     await networkService.getQuota();
     assert.ok(networkCalls.length > 0);
     assert.ok(networkCalls.every(({ init }) => init.redirect === "error" && init.maxResponseBytes === 1_048_576));
     assert.ok(networkCalls.every(({ init }) => init.timeoutMs <= 8_000));
 
-    await fallbackService.saveConfig({ action: "save", managementKey: "fallback-key" });
+    await fallbackService.saveConfig({ action: "save", managementKey: "fallback-key", baseUrl: CPA_BASE_URL });
     await fallbackService.getQuota();
     assert.ok(fallbackCalls.length > 0);
     assert.ok(fallbackCalls.every(({ init }) => init.signal instanceof AbortSignal));
