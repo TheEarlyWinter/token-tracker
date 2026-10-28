@@ -2781,3 +2781,131 @@ button.sb-codex-credit-btn:hover {
   border-radius: 2px;
 }
 
+/* ── 模型路由与切流检测视图 ── */
+.model-routing-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 24px;
+}
+
+.mr-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--orange, #f97316) 12%, transparent);
+  color: var(--orange, #ea580c);
+  border: 1px solid color-mix(in srgb, var(--orange, #f97316) 25%, transparent);
+  white-space: nowrap;
+}
+
+.mr-arrow {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  margin: 0 4px;
+}
+
+.mr-target-model {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.mr-actual-model {
+  color: var(--orange, #ea580c);
+  font-weight: 600;
+}
+
+.mr-session-id {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.mr-paging-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.mr-table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mr-status-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: var(--bg-hover);
+  padding: 2px 3px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+}
+
+.mr-status-btn {
+  padding: 3px 9px;
+  font-size: 11px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mr-status-btn:hover {
+  color: var(--text-primary);
+}
+
+.mr-status-btn.active {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+
+.mr-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.mr-badge-routed {
+  background: color-mix(in srgb, var(--orange, #f97316) 14%, transparent);
+  color: var(--orange, #ea580c);
+  border: 1px solid color-mix(in srgb, var(--orange, #f97316) 28%, transparent);
+}
+
+.mr-badge-normal {
+  background: color-mix(in srgb, var(--text-tertiary) 10%, transparent);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.mr-normal-model {
+  color: var(--text-primary);
+  font-weight: 500;
+}

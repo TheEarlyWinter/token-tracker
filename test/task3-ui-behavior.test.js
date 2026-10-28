@@ -476,12 +476,12 @@ test("Lithos loading 中日期变化只合并成一次最新请求，最新错�
 test("两账单的今日卡按真实今日取数，不把最后有记录日冒充今日", async () => withDom(async () => {
   const now = new Date();
   const today = dateKey(now);
-  const yesterday = dateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
+  const oldDay = dateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2));
 
   const dsContainer = new MiniElement("div");
   const ds = createDeepSeekUsage({
     container: dsContainer,
-    fetchFn: async () => response(dataFor("DS-OLD-DAY", yesterday, 5)),
+    fetchFn: async () => response(dataFor("DS-OLD-DAY", oldDay, 5)),
     getFilters: () => ({}),
   });
   ds.ensure();
@@ -494,14 +494,16 @@ test("两账单的今日卡按真实今日取数，不把最后有记录日冒�
   const lithos = createLithosSpend({
     container: lithosContainer,
     fetchFn: async (url) => url.startsWith("/lithos-spend")
-      ? response(lithosData("LITHOS-OLD-DAY", yesterday, 5))
+      ? response(lithosData("LITHOS-OLD-DAY", oldDay, 5))
       : response({ connected: true, display: "$9.00" }),
     getFilters: () => ({}),
   });
   lithos.ensure();
   await flush();
   assert.match(lithosContainer.innerHTML, /今日（UTC）<\/div><div class="ls-v">\$0\.00/);
-  assert.match(lithosContainer.innerHTML, new RegExp(`>${todayLabel}<\\/div>`));
+  const utcDate = new Date(Date.now());
+  const utcTodayLabel = `${utcDate.getUTCMonth() + 1}月${utcDate.getUTCDate()}日`;
+  assert.match(lithosContainer.innerHTML, new RegExp(`>${utcTodayLabel}<\\/div>`));
 }));
 
 test("dashboard 的 DeepSeek chip 回调同步全局日期、清空快捷范围并触发主看板加载", () => {

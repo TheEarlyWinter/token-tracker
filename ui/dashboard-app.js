@@ -21,6 +21,7 @@ import { renderHeatMatrix } from "./modules/heat-matrix.js";
 import { createLithosSpend } from "./modules/lithos-spend.js";
 import { createDeepSeekUsage } from "./modules/deepseek-usage.js";
 import { showResetCreditsModal } from "./modules/reset-credits-modal.js";
+import { createModelRouting } from "./modules/model-routing.js";
 
 (function(){
 "use strict";
@@ -50,7 +51,7 @@ function trackerFetch(endpoint, options) {
 }
 
 var _status = null, _viewError = false, _loadSequence = 0, _statusTimer = null, _closed = false;
-var _lithosSpend = null, _dsUsage = null, _activeView = "usage";
+var _lithosSpend = null, _dsUsage = null, _modelRouting = null, _activeView = "usage";
 var D, R = "today", tc, mc, ac, _allAgents = null, _allModels = null, _allProviders = null, _selAgent = "", _selModel = "", _selProvider = "", _selType = "", _selBalance = "deepseek", _provNames = null, _modelProv = "", _provRowHtml = "", _fxRate = null, _dispCur = "CNY";
 (function(){ try{_provNames=JSON.parse(localStorage.getItem("tt-prov-names")||"{}");}catch(e){_provNames={};} })();
 
@@ -60,13 +61,14 @@ function $(id) { return document.getElementById(id); }
 // 各视图各自维护自己的渲染，切换只是显隐；账单类视图首次进入才拉数据，
 // 免得没配 Cookie / 令牌的人切一下页签就吃一次失败。
 function setView(view) {
-  var usage = $("usage-view"), turns = $("turns-view"), lithos = $("lithos-spend-section"), dsUsage = $("ds-usage-section");
+  var usage = $("usage-view"), turns = $("turns-view"), lithos = $("lithos-spend-section"), dsUsage = $("ds-usage-section"), routing = $("model-routing-section");
   if (!usage || !lithos) return;
-  _activeView = (view === "turns" || view === "lithos" || view === "ds-usage") ? view : "usage";
+  _activeView = (view === "turns" || view === "lithos" || view === "ds-usage" || view === "model-routing") ? view : "usage";
   usage.style.display = _activeView === "usage" ? "" : "none";
   if (turns) turns.style.display = _activeView === "turns" ? "" : "none";
   lithos.style.display = _activeView === "lithos" ? "" : "none";
   if (dsUsage) dsUsage.style.display = _activeView === "ds-usage" ? "" : "none";
+  if (routing) routing.style.display = _activeView === "model-routing" ? "" : "none";
   var tabs = document.querySelectorAll("#view-tabs .vt");
   for (var i = 0; i < tabs.length; i++) {
     tabs[i].classList.toggle("on", tabs[i].getAttribute("data-view") === _activeView);
@@ -75,14 +77,15 @@ function setView(view) {
 
   // 外部平台账单不支持 Agent 与 类型 筛选，切到对应视图时视觉置灰
   var isBilling = (_activeView === "lithos" || _activeView === "ds-usage");
+  var isRouting = (_activeView === "model-routing");
   var sa = $("sa"), stype = $("stype");
   if (sa) {
     sa.classList.toggle("cs-disabled-billing", isBilling);
     sa.title = isBilling ? "外部平台账单不支持按 Agent 筛选" : "";
   }
   if (stype) {
-    stype.classList.toggle("cs-disabled-billing", isBilling);
-    stype.title = isBilling ? "外部平台账单不支持按类型筛选" : "";
+    stype.classList.toggle("cs-disabled-billing", isBilling || isRouting);
+    stype.title = (isBilling || isRouting) ? "当前视图不支持按类型筛选" : "";
   }
 
   if (_activeView === "turns") {
@@ -134,6 +137,27 @@ function setView(view) {
       });
     }
     if (_dsUsage) _dsUsage.ensure();
+  } else if (_activeView === "model-routing" && routing) {
+    if (!_modelRouting && typeof createModelRouting === "function") {
+      _modelRouting = createModelRouting({
+        container: routing,
+        fetchFn: trackerFetch,
+        getFilters: () => ({
+          agent: _selAgent || "",
+          model: _selModel || "",
+          provider: _selProvider || "",
+          range: R || "all",
+          from: $("df") ? $("df").value : "",
+          to: $("dt") ? $("dt").value : "",
+        }),
+        onClearModel: () => {
+          _selModel = "";
+          updateFilterOpts();
+          load();
+        },
+      });
+    }
+    if (_modelRouting) _modelRouting.ensure();
   }
 }
 
@@ -337,7 +361,7 @@ $("app").innerHTML =
   '<div class="main-area">'+
   '<div class="archive-intro"><span>PERSONAL USAGE ARCHIVE / 01</span><p>把每一次调用，放回工作流里看。</p></div>'+
   '<div class="hdr"><div class="hdr-left"><span class="hdr-title">用量</span><span id="lu">—</span></div><div id="hdrQuota" class="hdr-quota"></div><div class="hdr-right"><button class="btn-icon" id="rf" title="刷新数据"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button><button class="btn-icon" id="th-btn" title="切换深色模式"></button><button class="btn-icon" id="st-btn" title="设置"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button><span class="unit-hint" id="uh">ⓘ</span></div></div>'+
-  '<div class="view-tabs" id="view-tabs"><button type="button" class="vt on" data-view="usage">用量</button><button type="button" class="vt" data-view="turns">调用明细</button><button type="button" class="vt" data-view="lithos">LithosAI 消费</button><button type="button" class="vt" data-view="ds-usage">DeepSeek 官方用量</button></div>'+
+  '<div class="view-tabs" id="view-tabs"><button type="button" class="vt on" data-view="usage">用量</button><button type="button" class="vt" data-view="turns">调用明细</button><button type="button" class="vt" data-view="lithos">LithosAI 消费</button><button type="button" class="vt" data-view="ds-usage">DeepSeek 官方用量</button><button type="button" class="vt" data-view="model-routing">模型路由</button></div>'+
   '<div id="usage-view">'+
   '<details id="runtime-health" class="runtime-health"><summary id="health-summary">运行状态 · 尚未取得检查结果</summary><div id="health-details"></div><details class="metric-help"><summary>指标与采集范围说明</summary><p>首响：请求发出至 provider 响应元数据到达，不是真正的首 token TTFT。</p><p>速度：输出 token ÷ 完整请求时长，包含等待；优先实时请求计量，无有效实时样本时使用同模型最近 8 条有效账本时长回退，不是流式瞬时速度。</p><p>胶囊缓存率：本会话当前模型最近 50 条记录，按 token 体量加权；看板缓存率维持缓存读 token ÷ 当前筛选范围总 token 的既有口径。</p><p>费用为估算，与供应商账单可能不同。余额查询时间不代表用量同步时间。</p><p id="coverage-help"></p></details><details class="diagnostic-preview"><summary>查看诊断摘要</summary><pre id="diagnostic-text"></pre><button class="btn" id="copy-diagnostic">复制诊断摘要</button><span id="copy-result" role="status"></span><p>仅复制已预览的摘要，不会自动上传。</p></details></details>'+
   '<div id="source-classification-notice" class="source-notice" style="display:none">部分历史会话无法识别来源，Code 分类可能不完整。</div>'+
@@ -355,6 +379,7 @@ $("app").innerHTML =
   '<div id="turns-view" class="turns-view" style="display:none"><div id="turns-inspector-section"></div></div>'+
   '<div id="lithos-spend-section" class="lithos-spend-section" style="display:none"></div>'+
   '<div id="ds-usage-section" class="lithos-spend-section" style="display:none"></div>'+
+  '<div id="model-routing-section" class="model-routing-section" style="display:none"></div>'+
   '<div id="ld" class="ld">翻阅档案…</div>'+
   '</div>'+
   '</div>'+
@@ -384,6 +409,9 @@ function load(refreshFirst) {
     D = d; _viewError=false; _fxRate = d._fxRate > 0 ? d._fxRate : null;
     if (el) el.style.display = "none";
     render();
+    if (_activeView === "model-routing" && _modelRouting) {
+      _modelRouting.reloadWithFilters({ refresh: true });
+    }
   }).catch(() => {
     if(sequence !== _loadSequence || _closed) return;
     _viewError=true;
@@ -448,6 +476,10 @@ async function pollStatus() {
 
 function refresh() {
   _lastTurnsFilterKey = null;
+  if (_activeView === "model-routing" && _modelRouting) {
+    _modelRouting.refresh();
+    return;
+  }
   load(true);
 }
 
@@ -490,6 +522,8 @@ function render() {
     _lithosSpend.reloadWithFilters();
   } else if (_activeView === "ds-usage" && _dsUsage) {
     _dsUsage.reloadWithFilters();
+  } else if (_activeView === "model-routing" && _modelRouting) {
+    _modelRouting.reloadWithFilters();
   }
 }
 

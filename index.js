@@ -14,6 +14,13 @@ import { createSyncScheduler } from "./lib/sync-scheduler.mjs";
 import { createSessionSourceResolver } from "./lib/session-sources.mjs";
 import { loadSettings } from "./lib/settings-store.mjs";
 import { initMetricsCollector } from "./lib/metrics-collector.mjs";
+import { ModelRoutingStore } from "./lib/model-routing.mjs";
+import { deriveHanaHome } from "./lib/local-client.mjs";
+
+function safeCode(error) {
+  const code = typeof error?.code === "string" ? error.code : "";
+  return /^[A-Z0-9][A-Z0-9_.:-]{0,63}$/.test(code) ? code : "UNKNOWN";
+}
 
 const pluginVersion = JSON.parse(
   fs.readFileSync(new URL("./manifest.json", import.meta.url), "utf8")
@@ -64,6 +71,12 @@ export default defineApp(async (sdk) => {
     realtimeSnapshot,
   };
 
+  const modelRoutingStore = new ModelRoutingStore({
+    dataDir,
+    log: (level, ...args) => { try { log[level]?.(...args); } catch {} },
+  });
+  shared.modelRoutingStore = modelRoutingStore;
+
   sdk._tokenCache = shared;
   if (sdk.rawContext) {
     try { sdk.rawContext._tokenCache = shared; } catch {}
@@ -93,7 +106,19 @@ export default defineApp(async (sdk) => {
     interval,
     sourceResolver,
     // 部署改名/新建 Agent 后看板不用等重启；节流在 refreshAgentNames 里。
-    afterScan: () => refreshAgentNames(shared),
+    afterScan: async () => {
+      try {
+        await refreshAgentNames(shared);
+      } catch (error) {
+        shared.log.warn?.(`[token-tracker] agent names refresh failed: ${safeCode(error)}`);
+      }
+      try {
+        const hanaHome = client.hanaHome || deriveHanaHome(dataDir);
+        if (hanaHome) modelRoutingStore.scanSessions(hanaHome);
+      } catch (error) {
+        shared.log.warn?.(`[token-tracker] model routing history scan failed: ${safeCode(error)}`);
+      }
+    },
   });
   shared.scheduler = scheduler;
   shared.scan = scheduler.scan;
@@ -130,6 +155,11 @@ export default defineApp(async (sdk) => {
     shared.health.clear();
 
     scheduler.stop();
+
+    if (shared.modelRoutingStore?.close) {
+      try { shared.modelRoutingStore.close(); } catch {}
+      shared.modelRoutingStore = null;
+    }
 
     if (shared.turnsStore?.close) {
       try { shared.turnsStore.close(); } catch {}

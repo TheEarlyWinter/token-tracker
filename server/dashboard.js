@@ -17,6 +17,7 @@ import { DeepSeekBalanceService } from "../lib/deepseek-balance.mjs";
 import { LithosBalanceService, looseCookieValues, monthToDateUtc } from "../lib/lithos-balance.mjs";
 import { DeepSeekUsageService } from "../lib/deepseek-usage.mjs";
 import { writeFileAtomic } from "../runtime/engine/services/jsonl-log.js";
+import { deriveHanaHome } from "../lib/local-client.mjs";
 const MANIFEST = JSON.parse(fs.readFileSync(new URL('../manifest.json', import.meta.url), 'utf8'));
 const UI_VERSION = MANIFEST.version;
 const BALANCE_ALLOWED_HOSTS = new Set(MANIFEST.network?.allowedHosts || []);
@@ -1164,6 +1165,31 @@ export default function (app, ctx) {
 
   app.get("/dashboard/lithos-spend", handleLithosSpend);
   app.get("/lithos-spend", handleLithosSpend);
+
+  const handleModelRouting = (c) => {
+    const badRequest = () => c.json({ ok: false, error: "模型路由请求参数无效", code: "INVALID_REQUEST" }, 400);
+    const storageUnavailable = () => c.json({ ok: false, error: "模型路由数据暂不可用", code: "STORAGE_UNAVAILABLE" }, 503);
+    try {
+      const cache = ctx._tokenCache;
+      const store = cache?.modelRoutingStore;
+      if (!store) return storageUnavailable();
+      const query = c.req.query() || {};
+      const force = query.force === true || query.force === "true" || query.refresh === true || query.refresh === "true";
+      const hanaHome = force
+        ? (cache?.client?.hanaHome || deriveHanaHome(cache?.dataDir || ctx.dataDir))
+        : null;
+      const data = force ? store.queryRoutes(query, hanaHome) : store.queryRoutes(query);
+      if (data?.ok === false && data.code === "MODEL_ROUTING_STORAGE_UNAVAILABLE") return storageUnavailable();
+      return c.json(data);
+    } catch (err) {
+      if (err?.code === "MODEL_ROUTING_STORAGE_UNAVAILABLE") return storageUnavailable();
+      if (err?.code === "MODEL_ROUTING_INVALID_QUERY") return badRequest();
+      return c.json({ ok: false, error: "模型路由数据读取失败", code: "MODEL_ROUTING_ERROR" }, 500);
+    }
+  };
+
+  app.get("/dashboard/model-routing", handleModelRouting);
+  app.get("/model-routing", handleModelRouting);
 
   app.get("/widget/stream", handleWidgetStream);
   app.get("/widget/data", handleWidgetData);
