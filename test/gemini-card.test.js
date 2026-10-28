@@ -297,6 +297,14 @@ test("unauthorized 和 forbidden 使用固定管理鉴权受限文案", () => {
   }
 });
 
+test("missing_base_url 明确提示尚未配置网关地址", () => {
+  const container = new FakeContainer();
+  renderGeminiCard(container, { configured: true, connected: false, reason: "missing_base_url", accounts: [] });
+  assert.equal(container.section.style.display, "");
+  assert.match(container.innerHTML, /尚未配置网关地址，请在设置里填写 CPA 网关地址。/);
+  assert.doesNotMatch(container.innerHTML, /missing_base_url|cpa\.example\.invalid/);
+});
+
 test("看板不再重复挂载 Gemini 卡，Function Panel 独立接入共享卡片、配置路由和独立 Gemini 请求", () => {
   const dashboard = fs.readFileSync(path.join(root, "ui", "dashboard-app.js"), "utf8");
   const panel = fs.readFileSync(path.join(root, "ui", "function-panel.js"), "utf8");
@@ -314,9 +322,13 @@ test("看板不再重复挂载 Gemini 卡，Function Panel 独立接入共享卡
   assert.match(panelHtml, /id="gemini-card-slot"/);
   assert.match(settings, /gemini-quota\/config/);
   assert.match(settings, /set-gemini-key/);
+  assert.match(settings, /set-gemini-base/);
+  assert.match(settings, /网关地址/);
+  assert.match(settings, /network\.allowedHosts/);
   assert.match(settings, /set-gemini-save/);
   assert.match(settings, /set-gemini-clear/);
   assert.match(settings, /managementKey/);
+  assert.match(settings, /baseUrl/);
 });
 
 test("设置和面板不把管理密钥写入 localStorage、日志或任意 URL", () => {
@@ -326,7 +338,9 @@ test("设置和面板不把管理密钥写入 localStorage、日志或任意 URL
 
   assert.doesNotMatch(combined, /localStorage\.(setItem|getItem)\([^)]*managementKey/i);
   assert.doesNotMatch(combined, /console\.(log|debug|info|warn|error)\([^)]*managementKey/i);
-  assert.doesNotMatch(combined, /https?:\/\//i);
+  // 前端不得内置任何真实 CPA 主机（只允许 https://… 这类占位提示）
+  assert.doesNotMatch(combined, /https?:\/\/[a-z0-9-]+(?:\.[a-z0-9-]+)+/i);
+  assert.match(combined, /https:\/\/…/);
   assert.match(combined, /tt-gemini-config-tick/);
   assert.match(combined, /action:\s*["'](?:save|clear)["']/);
 });
@@ -358,7 +372,7 @@ test("设置页保存和清空只提交固定动作，成功后清空输入并�
   [
     "st-btn", "set-panel", "set-shade", "set-close", "set-save", "set-scan-interval",
     "set-high-usage", "set-show-codex", "set-show-deepseek", "set-msg",
-    "set-gemini-key", "set-gemini-save", "set-gemini-clear", "set-gemini-status",
+    "set-gemini-key", "set-gemini-base", "set-gemini-save", "set-gemini-clear", "set-gemini-status",
   ].forEach(makeElement);
 
   const originalDocument = globalThis.document;
@@ -379,16 +393,25 @@ test("设置页保存和清空只提交固定动作，成功后清空输入并�
 
   const posted = [];
   const changed = [];
+  let configState = { configured: false, baseUrl: "https://synthetic-cpa.invalid", baseUrlConfigured: false };
   try {
     const fetchFn = async (url, options) => {
       if (url === "/settings") return { ok: true, json: async () => ({ scanInterval: 60, highUsageThreshold: 30000 }) };
       if (url === "/gemini-quota/config" && !options) {
-        return { ok: true, json: async () => ({ configured: false, baseUrl: "https://synthetic-cpa.invalid" }) };
+        return { ok: true, json: async () => configState };
       }
       if (url === "/gemini-quota/config" && options?.method === "POST") {
         const body = JSON.parse(options.body);
         posted.push(body);
-        return { ok: true, json: async () => ({ configured: body.action === "save", baseUrl: "https://synthetic-cpa.invalid" }) };
+        const baseUrl = body.baseUrl || "https://synthetic-cpa.invalid";
+        return {
+          ok: true,
+          json: async () => ({
+            configured: body.action === "save",
+            baseUrl,
+            baseUrlConfigured: body.action === "save",
+          }),
+        };
       }
       return { ok: false, status: 404, json: async () => ({}) };
     };
@@ -397,16 +420,37 @@ test("设置页保存和清空只提交固定动作，成功后清空输入并�
       onGeminiConfigChanged: (action, data) => changed.push({ action, configured: data?.configured }),
     });
 
+    await dialog.loadGeminiConfig();
+    assert.equal(elements["set-gemini-status"].textContent, "未配置");
+    assert.equal(elements["set-gemini-base"].value, "", "默认占位地址不回填到输入框");
+
+    // 有密钥没地址：状态文案必须点明缺什么，而不是笼统的“未配置”
+    configState = { configured: true, baseUrl: "https://synthetic-cpa.invalid", baseUrlConfigured: false };
+    await dialog.loadGeminiConfig();
+    assert.equal(elements["set-gemini-status"].textContent, "缺少网关地址");
+    assert.equal(elements["set-gemini-base"].value, "");
+
     elements["set-gemini-key"].value = "synthetic-management-key";
+    elements["set-gemini-base"].value = "https://synthetic-cpa.invalid/cpa";
     await elements["set-gemini-save"].onclick();
-    assert.deepEqual(posted[0], { action: "save", managementKey: "synthetic-management-key" });
+    assert.deepEqual(posted[0], {
+      action: "save",
+      managementKey: "synthetic-management-key",
+      baseUrl: "https://synthetic-cpa.invalid/cpa",
+    });
     assert.equal(elements["set-gemini-key"].value, "");
+    assert.equal(elements["set-gemini-base"].value, "https://synthetic-cpa.invalid/cpa");
+    assert.equal(elements["set-gemini-status"].textContent, "已配置 · synthetic-cpa.invalid");
     assert.deepEqual(changed, [{ action: "save", configured: true }]);
 
     await new Promise((resolve) => setTimeout(resolve, 2));
     elements["set-gemini-key"].value = "synthetic-management-key-2";
     await elements["set-gemini-save"].onclick();
-    assert.deepEqual(posted[1], { action: "save", managementKey: "synthetic-management-key-2" });
+    assert.deepEqual(posted[1], {
+      action: "save",
+      managementKey: "synthetic-management-key-2",
+      baseUrl: "https://synthetic-cpa.invalid/cpa",
+    });
     assert.deepEqual(changed, [
       { action: "save", configured: true },
       { action: "save", configured: true },

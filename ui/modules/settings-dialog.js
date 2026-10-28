@@ -34,6 +34,7 @@ export function initSettingsDialog({ onThemeChange, onSettingsSaved, onGeminiCon
   const dsSave = document.getElementById("set-ds-save");
   const dsStatus = document.getElementById("set-ds-status");
   const geminiKeyInput = document.getElementById("set-gemini-key");
+  const geminiBaseInput = ensureGeminiBaseInput();
   const geminiSave = document.getElementById("set-gemini-save");
   const geminiClear = document.getElementById("set-gemini-clear");
   const geminiStatus = document.getElementById("set-gemini-status");
@@ -84,28 +85,67 @@ export function initSettingsDialog({ onThemeChange, onSettingsSaved, onGeminiCon
     geminiStatus.style.color = isError ? "var(--orange)" : "var(--text-tertiary)";
   }
 
+  // 网关地址既可以在静态 HTML 里写死，也可以在运行时补上；找到就不重复插入。
+  function ensureGeminiBaseInput() {
+    if (typeof document === "undefined") return null;
+    const existing = document.getElementById("set-gemini-base");
+    if (existing) return existing;
+    const anchor = document.getElementById("set-gemini-key");
+    const group = anchor?.parentElement ?? null;
+    const host = group?.parentElement ?? null;
+    if (!group || !host || typeof document.createElement !== "function") return null;
+    const wrapper = document.createElement("div");
+    wrapper.className = "set-form-group";
+    wrapper.innerHTML = '<label class="set-label" for="set-gemini-base"><span>网关地址</span><span class="set-hint">CPA 网关根地址，需与 network.allowedHosts 一致</span></label><input type="url" class="set-input" id="set-gemini-base" placeholder="https://…" autocomplete="off" spellcheck="false">';
+    if (typeof group.after === "function") group.after(wrapper);
+    else host.appendChild(wrapper);
+    return document.getElementById("set-gemini-base");
+  }
+
+  function baseHost(value) {
+    const text = typeof value === "string" ? value.trim() : "";
+    if (!text) return "";
+    try {
+      return new URL(text).host || "";
+    } catch {
+      return text;
+    }
+  }
+
+  function geminiStatusText(data) {
+    const configured = data?.configured === true;
+    if (!configured) return "未配置";
+    if (data?.baseUrlConfigured !== true) return "缺少网关地址";
+    return `已配置 · ${baseHost(data.baseUrl) || "指定 CPA 主机"}`;
+  }
+
+  function echoGeminiBaseUrl(data) {
+    if (!geminiBaseInput) return;
+    geminiBaseInput.value = data?.baseUrlConfigured === true && typeof data?.baseUrl === "string" ? data.baseUrl : "";
+  }
+
   async function loadGeminiConfig() {
     if (typeof fetchFn !== "function" || !geminiStatus) return;
     try {
       const res = await fetchFn("/gemini-quota/config");
       const data = await res.json();
       if (!res.ok || !data || typeof data.configured !== "boolean") throw new Error("config_status_unavailable");
-      const baseUrl = typeof data.baseUrl === "string" ? data.baseUrl : "";
-      setGeminiStatus(data.configured
-        ? `已配置 · ${baseUrl || "指定 CPA 主机"}`
-        : `未配置${baseUrl ? ` · ${baseUrl}` : ""}`);
+      setGeminiStatus(geminiStatusText(data));
+      echoGeminiBaseUrl(data);
     } catch {
       setGeminiStatus("安全状态暂不可用", true);
     }
   }
 
-  async function submitGeminiConfig(action, managementKey = "") {
+  async function submitGeminiConfig(action, managementKey = "", baseUrl = "") {
     if (typeof fetchFn !== "function") return;
     const buttons = [geminiSave, geminiClear].filter(Boolean);
     buttons.forEach((button) => { button.disabled = true; });
     setGeminiStatus(action === "clear" ? "正在清空…" : "正在保存…");
     try {
-      const payload = action === "clear" ? { action: "clear" } : { action: "save", managementKey };
+      const payload = action === "clear"
+        ? { action: "clear" }
+        : { action: "save", managementKey, ...(baseUrl ? { baseUrl } : {}) };
       const res = await fetchFn("/gemini-quota/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -113,12 +153,16 @@ export function initSettingsDialog({ onThemeChange, onSettingsSaved, onGeminiCon
       });
       let data = null;
       try { data = await res.json(); } catch {}
-      if (!res.ok || !data || typeof data.configured !== "boolean") throw new Error("gemini_config_failed");
+      if (!res.ok || !data || typeof data.configured !== "boolean") {
+        if (data?.code === "INVALID_INPUT" && baseUrl) {
+          setGeminiStatus("网关地址不合法，需以 https:// 开头且不带查询串", true);
+          return;
+        }
+        throw new Error("gemini_config_failed");
+      }
       if (geminiKeyInput) geminiKeyInput.value = "";
-      const baseUrl = typeof data.baseUrl === "string" ? data.baseUrl : "";
-      setGeminiStatus(data.configured
-        ? `已配置 · ${baseUrl || "指定 CPA 主机"}`
-        : `未配置${baseUrl ? ` · ${baseUrl}` : ""}`);
+      setGeminiStatus(geminiStatusText(data));
+      echoGeminiBaseUrl(data);
       const configured = data.configured === true;
       try {
         getSettingsBroadcastChannel()?.postMessage({ type: "tt-gemini-config-updated", action, configured });
@@ -144,11 +188,12 @@ export function initSettingsDialog({ onThemeChange, onSettingsSaved, onGeminiCon
   if (geminiSave) {
     geminiSave.onclick = async () => {
       const managementKey = geminiKeyInput?.value?.trim() || "";
+      const baseUrl = geminiBaseInput?.value?.trim() || "";
       if (!managementKey) {
         setGeminiStatus("请输入管理密钥", true);
         return;
       }
-      await submitGeminiConfig("save", managementKey);
+      await submitGeminiConfig("save", managementKey, baseUrl);
     };
   }
 
@@ -401,5 +446,5 @@ export function initSettingsDialog({ onThemeChange, onSettingsSaved, onGeminiCon
 
   loadSettingsData();
 
-  return { openSet, closeSet, loadSettingsData, saveSettings, getSettings: () => currentSettings };
+  return { openSet, closeSet, loadSettingsData, saveSettings, loadGeminiConfig, getSettings: () => currentSettings };
 }

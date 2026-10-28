@@ -1203,13 +1203,26 @@ export default function (app, ctx) {
     } catch {
       return c.json({ ok: false, code: "INVALID_INPUT" }, 400);
     }
+    const input = body && typeof body === "object" ? body : {};
     let result;
     try {
-      result = await geminiQuotaService.saveConfig(body && typeof body === "object" ? body : {});
+      result = await geminiQuotaService.saveConfig({
+        action: input.action,
+        managementKey: input.managementKey,
+        // 显式透传：未传时由 saveConfig 沿用磁盘上已有的网关地址
+        baseUrl: Object.prototype.hasOwnProperty.call(input, "baseUrl") ? input.baseUrl : undefined,
+      });
     } catch {
       return c.json({ ok: false, code: "GEMINI_QUOTA_CONFIG_ERROR" }, 503);
     }
-    if (result.ok) return c.json(result);
+    if (result.ok) {
+      return c.json({
+        ok: true,
+        configured: result.configured === true,
+        baseUrl: result.baseUrl,
+        baseUrlConfigured: result.baseUrlConfigured === true,
+      });
+    }
     const status = result.code === "INVALID_INPUT" ? 400 : 503;
     return c.json({ ok: false, code: result.code || "GEMINI_QUOTA_CONFIG_ERROR" }, status);
   };

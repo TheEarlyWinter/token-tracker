@@ -78,7 +78,7 @@ test("Gemini 路由只实例化共享服务、注册双别名、代理合成 CPA
     assert.equal(typeof app.routes.POST["/gemini-quota/config"], "function");
 
     const before = await app.dispatch("GET", "/gemini-quota/config");
-    assert.deepEqual(before.body, { configured: false, baseUrl: CPA_BASE_URL });
+    assert.deepEqual(before.body, { configured: false, baseUrl: CPA_BASE_URL, baseUrlConfigured: false });
     const bad = await app.dispatch("POST", "/gemini-quota/config", {}, { action: "save", managementKey: "" });
     assert.equal(bad.status, 400);
     assert.equal(bad.body.code, "INVALID_INPUT");
@@ -89,9 +89,12 @@ test("Gemini 路由只实例化共享服务、注册双别名、代理合成 CPA
     const saved = await app.dispatch("POST", "/dashboard/gemini-quota/config", {}, {
       action: "save",
       managementKey: "route-management-secret",
+      baseUrl: CPA_BASE_URL,
     });
     assert.equal(saved.status, 200);
     assert.equal(saved.body.configured, true);
+    assert.equal(saved.body.baseUrl, CPA_BASE_URL);
+    assert.equal(saved.body.baseUrlConfigured, true);
     assert.doesNotMatch(JSON.stringify(saved.body), /route-management-secret/);
 
     const quota = await app.dispatch("GET", "/gemini-quota");
@@ -102,11 +105,50 @@ test("Gemini 路由只实例化共享服务、注册双别名、代理合成 CPA
     assert.equal(calls.filter((call) => call.url === CREDENTIALS_URL).length, 1);
 
     const config = await app.dispatch("GET", "/dashboard/gemini-quota/config");
-    assert.deepEqual(config.body, { configured: true, baseUrl: CPA_BASE_URL });
+    assert.deepEqual(config.body, { configured: true, baseUrl: CPA_BASE_URL, baseUrlConfigured: true });
     const cleared = await app.dispatch("POST", "/gemini-quota/config", {}, { action: "clear" });
     assert.equal(cleared.status, 200);
     assert.equal(cleared.body.configured, false);
+    assert.equal(cleared.body.baseUrlConfigured, false);
     assert.doesNotMatch(JSON.stringify(cleared.body), /route-management-secret/);
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("Gemini 配置路由透传 baseUrl：非法地址 400，未传时沿用已存地址，响应回带 baseUrl 与标记", async () => {
+  const dataDir = tempDir();
+  const app = createMockApp();
+  const ctx = { dataDir, network: null, _tokenCache: {} };
+  try {
+    registerRoutes(app, ctx);
+
+    const badBase = await app.dispatch("POST", "/gemini-quota/config", {}, {
+      action: "save",
+      managementKey: "route-key",
+      baseUrl: "http://insecure.test",
+    });
+    assert.equal(badBase.status, 400);
+    assert.equal(badBase.body.code, "INVALID_INPUT");
+    assert.equal(fs.existsSync(path.join(dataDir, "gemini-cpa.json")), false);
+
+    const saved = await app.dispatch("POST", "/gemini-quota/config", {}, {
+      action: "save",
+      managementKey: "route-key",
+      baseUrl: "https://cpa.example.invalid/cpa/",
+    });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.baseUrl, "https://cpa.example.invalid/cpa");
+    assert.equal(saved.body.baseUrlConfigured, true);
+
+    // 只轮换密钥、不传 baseUrl：沿用磁盘上已有的地址
+    const rotated = await app.dispatch("POST", "/gemini-quota/config", {}, {
+      action: "save",
+      managementKey: "route-key-2",
+    });
+    assert.equal(rotated.status, 200);
+    assert.equal(rotated.body.baseUrl, "https://cpa.example.invalid/cpa");
+    assert.equal(rotated.body.baseUrlConfigured, true);
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }

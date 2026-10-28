@@ -127,6 +127,7 @@ function renderAccount(account, now) {
 
 function safeReasonMessage(reason, connected) {
   switch (reason) {
+    case "missing_base_url": return "尚未配置网关地址，请在设置里填写 CPA 网关地址。";
     case "missing_project": return "缺少项目，暂时无法查询配额。";
     case "unauthorized":
     case "forbidden": return "管理鉴权受限，请检查密钥和远程管理，再重新保存配置";
