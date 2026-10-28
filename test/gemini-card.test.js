@@ -297,17 +297,16 @@ test("unauthorized 和 forbidden 使用固定管理鉴权受限文案", () => {
   }
 });
 
-test("看板和 Function Panel 均接入共享卡片、配置路由和独立 Gemini 请求", () => {
+test("看板不再重复挂载 Gemini 卡，Function Panel 独立接入共享卡片、配置路由和独立 Gemini 请求", () => {
   const dashboard = fs.readFileSync(path.join(root, "ui", "dashboard-app.js"), "utf8");
   const panel = fs.readFileSync(path.join(root, "ui", "function-panel.js"), "utf8");
   const panelHtml = fs.readFileSync(path.join(root, "ui", "function-panel.html"), "utf8");
   const settings = fs.readFileSync(path.join(root, "ui", "modules", "settings-dialog.js"), "utf8");
 
-  assert.match(dashboard, /createGeminiQuotaController/);
-  assert.match(dashboard, /gemini-card-slot/);
-  assert.match(dashboard, /geminiPool|gemini-pool/i);
-  assert.match(dashboard, /id="gemini-pool-section"[^>]*style="display:none"[^>]*>\s*<div class="sidebar-divider"/);
-  assert.match(dashboard, /tt-gemini-config-updated/);
+  // 算力池只保留在最左侧功能面板一处：看板侧栏曾同时挂了一份，同数据同渲染，属于重复。
+  assert.doesNotMatch(dashboard, /createGeminiQuotaController/);
+  assert.doesNotMatch(dashboard, /gemini-card-slot/);
+  assert.doesNotMatch(dashboard, /id="gemini-pool-section"/);
   assert.match(panel, /createGeminiQuotaController/);
   assert.match(panel, /gemini-card-slot/);
   assert.match(panel, /gemini-config-updated/);

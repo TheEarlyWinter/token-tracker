@@ -22,7 +22,8 @@ import { createLithosSpend } from "./modules/lithos-spend.js";
 import { createDeepSeekUsage } from "./modules/deepseek-usage.js";
 import { showResetCreditsModal } from "./modules/reset-credits-modal.js";
 import { createModelRouting } from "./modules/model-routing.js";
-import { createGeminiQuotaController } from "./modules/gemini-card.js";
+// Gemini 算力池只在左侧功能面板（function-panel.html）里展示。看板侧栏原本也有一份，
+// 两块同源同渲染，纯属重复；已从看板移除，设置里的 CPA 管理密钥仍经广播通知面板刷新。
 
 (function(){
 "use strict";
@@ -52,7 +53,7 @@ function trackerFetch(endpoint, options) {
 }
 
 var _status = null, _viewError = false, _loadSequence = 0, _statusTimer = null, _closed = false;
-var _lithosSpend = null, _dsUsage = null, _modelRouting = null, _geminiPool = null, _activeView = "usage";
+var _lithosSpend = null, _dsUsage = null, _modelRouting = null, _activeView = "usage";
 var D, R = "today", tc, mc, ac, _allAgents = null, _allModels = null, _allProviders = null, _selAgent = "", _selModel = "", _selProvider = "", _selType = "", _selBalance = "deepseek", _provNames = null, _modelProv = "", _provRowHtml = "", _fxRate = null, _dispCur = "CNY";
 (function(){ try{_provNames=JSON.parse(localStorage.getItem("tt-prov-names")||"{}");}catch(e){_provNames={};} })();
 
@@ -358,7 +359,6 @@ $("app").innerHTML =
   '<span class="cs" id="stype"><span class="cs-txt">类型</span><span class="cs-arw">▾</span><div class="cs-list"><div class="cs-opt sel" data-v="">全部</div><div class="cs-opt" data-v="desktop">聊天</div><div class="cs-opt" data-v="channel">频道</div><div class="cs-opt" data-v="code">Code</div></div></span>'+
   '</div>'+
   '<div id="fx" class="fx-side" style="display:none"></div>'+
-  '<div id="gemini-pool-section" class="sidebar-section gemini-pool-section" style="display:none"><div class="sidebar-divider"></div><div class="sidebar-label">Gemini 算力池</div><div id="gemini-card-slot"></div></div>'+
   '</div>'+
   '<div class="main-area">'+
   '<div class="archive-intro"><span>PERSONAL USAGE ARCHIVE / 01</span><p>把每一次调用，放回工作流里看。</p></div>'+
@@ -478,7 +478,6 @@ async function pollStatus() {
 
 function refresh() {
   _lastTurnsFilterKey = null;
-  if (_geminiPool) _geminiPool.refresh();
   if (_activeView === "model-routing" && _modelRouting) {
     _modelRouting.refresh();
     return;
@@ -902,29 +901,12 @@ function renderConsumption(){
 
 function escHTML(s){if(!s)return'';return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 
-function initGeminiPool() {
-  var slot = $("gemini-card-slot");
-  if (!slot) return null;
-  _geminiPool = createGeminiQuotaController({
-    container: slot,
-    fetchFn: trackerFetch,
-  });
-  _geminiPool.load();
-  return _geminiPool;
-}
-
 $("rf").onclick = refresh;
 var thBtn = $("th-btn");
 if (thBtn) thBtn.onclick = function() { toggleTheme({ onThemeChange: function() { if (D) render(); } }); };
 initSettingsDialog({
   fetchFn: trackerFetch,
   onThemeChange: function() { if (D) render(); },
-  onGeminiConfigChanged: function(action, data) {
-    if (_geminiPool) _geminiPool.reload({
-      hide: action === "clear",
-      configured: typeof data?.configured === "boolean" ? data.configured : undefined,
-    });
-  },
 });
 document.querySelectorAll(".fb").forEach(b => {
   b.onclick = function() { R = this.dataset.r; document.querySelectorAll(".fb").forEach(x => x.classList.toggle("act", x.dataset.r === R)); _selAgent=""; _selModel=""; _selProvider=""; syncDateInputs(); load(); };
@@ -1003,13 +985,8 @@ function getQuotaBroadcastChannel() {
       }
       quotaBc.addEventListener("message", function(e) {
         var message = e.data;
-        if (message?.type === "tt-gemini-config-updated") {
-          if (_geminiPool) _geminiPool.reload({
-            hide: message.action === "clear",
-            configured: typeof message.configured === "boolean" ? message.configured : message.action === "save",
-          });
-          return;
-        }
+        // tt-gemini-config-updated 不再由看板处理：算力池卡已只在功能面板一侧，
+        // 那边自己监听广播，不需要看板再代理一层。
         if (message?.type !== "open-reset-credits-modal") return;
         var requestId = message?.requestId;
         if (!requestId || document.hidden === true || _closed) return;
@@ -1073,12 +1050,10 @@ function refreshQuota() {
 }
 var quotaTimer=setInterval(function(){
   refreshQuota();
-  if (_geminiPool) _geminiPool.refresh();
 }, 60000);
 document.addEventListener("visibilitychange", function(){
   if (!document.hidden) {
     refreshQuota();
-    if (_geminiPool) _geminiPool.refresh();
   }
 });
 
@@ -1089,11 +1064,10 @@ $("copy-diagnostic").onclick=async function(){
     $("copy-result").textContent=result.ok?"已复制":result.reason==="permission_denied"?"未获剪贴板写入授权，请在插件权限入口授权。":"复制不可用，请选择上方摘要手动复制。";
   } catch { $("copy-result").textContent="复制不可用，请选择上方摘要手动复制。"; }
 };
-window.addEventListener("pagehide",function(){_closed=true;clearTimeout(_statusTimer);clearInterval(quotaTimer);_geminiPool?.dispose();});
+window.addEventListener("pagehide",function(){_closed=true;clearTimeout(_statusTimer);clearInterval(quotaTimer);});
 syncDateInputs();
 initViewTabs();
 getQuotaBroadcastChannel();
-initGeminiPool();
 load(false);
 pollStatus();
 })();
