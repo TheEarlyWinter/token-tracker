@@ -3081,3 +3081,394 @@ button.sb-codex-credit-btn:hover {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* ── 18. LithosAI 对账视图 (Lithos Reconcile) ── */
+.lr-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.lr-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.lr-head-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.lr-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.lr-sub {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.lr-head-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lr-updated {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.lr-refresh {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+.lr-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.lr-card {
+  background: var(--bg-card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 14px 16px;
+  min-width: 0;
+}
+
+.lr-k {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-bottom: 6px;
+}
+
+.lr-v {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.lr-v .lr-pct {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.lr-hint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 差额方向：为正标绿（多算钱），为负标橙（少算钱），不表达好坏，仅表达方向 */
+.lr-delta-pos {
+  color: var(--green) !important;
+}
+
+.lr-delta-neg {
+  color: var(--orange) !important;
+}
+
+.lr-text-ok {
+  color: var(--green);
+}
+
+.lr-text-warn {
+  color: var(--orange);
+  font-weight: 500;
+}
+
+/* null 占位符与提示 */
+.lr-null {
+  color: var(--text-tertiary);
+  border-bottom: 1px dashed var(--divider-strong);
+  cursor: help;
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 图表与表格卡片 */
+.lr-chart-card,
+.lr-table-card,
+.lr-unmatched-card,
+.lr-notes-card {
+  background: var(--bg-card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 18px;
+}
+
+.lr-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.lr-chart-box {
+  position: relative;
+  height: 260px;
+}
+
+.lr-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.lr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: left;
+}
+
+.lr-table th {
+  padding: 8px 10px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--divider);
+  white-space: nowrap;
+}
+
+.lr-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.lr-table tr:hover td {
+  background: var(--bg-hover);
+}
+
+.lr-table td.col-num,
+.lr-table th.col-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.lr-table td.col-date,
+.lr-table th.col-date {
+  font-variant-numeric: tabular-nums;
+}
+
+.lr-table td.col-status,
+.lr-table th.col-status {
+  text-align: center;
+  width: 64px;
+}
+
+.lr-strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.lr-model-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--text-primary);
+}
+
+/* 状态徽标 */
+.lr-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.lr-badge-warn {
+  background: rgba(255, 149, 0, 0.12);
+  color: var(--orange);
+  border: 1px solid rgba(255, 149, 0, 0.3);
+}
+
+.lr-badge-ok {
+  background: rgba(52, 199, 89, 0.12);
+  color: var(--green);
+  border: 1px solid rgba(52, 199, 89, 0.25);
+}
+
+/* 未匹配分栏 */
+.lr-unmatched-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.lr-unmatched-block {
+  background: var(--bg-grouped);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+
+.lr-unmatched-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.lr-unmatched-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.lr-unmatched-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.lr-unmatched-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.lr-table-sm th {
+  padding: 5px 8px;
+  font-size: 11px;
+}
+
+.lr-table-sm td {
+  padding: 6px 8px;
+  font-size: 11px;
+}
+
+/* 口径说明 */
+.lr-notes-card {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.lr-notes-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.lr-notes-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-secondary);
+}
+
+.lr-notes-fixed {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  border-top: 1px dashed var(--divider);
+  padding-top: 8px;
+}
+
+/* 空状态与骨架屏 */
+.lr-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.lr-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.lr-empty-note {
+  font-size: 12px;
+}
+
+.lr-empty-row {
+  text-align: center;
+  color: var(--text-tertiary);
+  padding: 24px 0;
+}
+
+.lr-empty-row-subtle {
+  text-align: center;
+  color: var(--text-tertiary);
+  padding: 12px 0;
+  font-size: 11px;
+}
+
+.lr-skeleton-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.lr-sk {
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  animation: lr-pulse 1.4s ease-in-out infinite alternate;
+}
+
+.lr-sk-title {
+  width: 120px;
+  height: 22px;
+}
+
+.lr-sk-btn {
+  width: 60px;
+  height: 26px;
+}
+
+.lr-sk-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 92px;
+  justify-content: center;
+}
+
+.lr-sk-line-sm {
+  width: 45%;
+  height: 12px;
+}
+
+.lr-sk-line-lg {
+  width: 75%;
+  height: 22px;
+}
+
+@keyframes lr-pulse {
+  0% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+

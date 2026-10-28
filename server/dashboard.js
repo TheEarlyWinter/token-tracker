@@ -15,6 +15,7 @@ import { buildVisualAnalytics } from "../runtime/engine/services/visual-analytic
 import { CodexQuotaService } from "../lib/codex-quota.mjs";
 import { DeepSeekBalanceService } from "../lib/deepseek-balance.mjs";
 import { LithosBalanceService, looseCookieValues, monthToDateUtc } from "../lib/lithos-balance.mjs";
+import { bucketTurns, dayCount, isIsoDay, reconcile, shiftIsoDay } from "../lib/reconcile.mjs";
 import { DeepSeekUsageService } from "../lib/deepseek-usage.mjs";
 import { GeminiQuotaService } from "../lib/gemini-quota.mjs";
 import { writeFileAtomic } from "../runtime/engine/services/jsonl-log.js";
@@ -633,6 +634,76 @@ export default function (app, ctx) {
     }
   };
 
+  // 对账：官方扣费 vs 本地按价目表估算。
+  // 区间用 UTC 日（官方口径），本地估算把同一个 UTC 窗口重算一遍，不用本机自然日。
+  const handleLithosReconcile = async (c) => {
+    try {
+      const force = c.req.query("force") === "1" || c.req.query("refresh") === "1";
+      const month = monthToDateUtc();
+      const start = c.req.query("start") || month.start;
+      const end = c.req.query("end") || month.end;
+      if (!isIsoDay(start) || !isIsoDay(end)) {
+        return c.json({ ok: false, code: "invalid_range", message: "区间要给 YYYY-MM-DD" }, 200);
+      }
+      const span = dayCount(start, end);
+      if (!span || span > 92) {
+        return c.json({ ok: false, code: "invalid_range", message: "区间跨度需在 1–92 天内" }, 200);
+      }
+
+      const spend = await lithosBalanceService.getSpend({ start, end, force });
+      if (!spend || spend.connected === false) {
+        const code = spend?.reason === "not_configured" ? "not_configured"
+          // 会话过期是这一页最常见的失败，单独成码，前端好直接引导重贴 Cookie。
+          : spend?.reason === "session_expired" || spend?.reason === "http_401" ? "session_expired"
+          : spend?.reason === "bad_range" ? "invalid_range"
+          : "request_failed";
+        return c.json({ ok: false, code, message: spend?.message || "Lithos 消费查询失败" }, 200);
+      }
+
+      const store = getTurnsStore();
+      if (!store) {
+        return c.json({ ok: false, code: "request_failed", message: "turns 索引未就绪，先让看板完整扫描一次" }, 200);
+      }
+
+      // turns.day 是本机自然日，与 UTC 日最多差一天，所以两端各放宽一天再按 at 重切。
+      const fromDay = shiftIsoDay(start, -1) || start;
+      const toDay = shiftIsoDay(end, 1) || end;
+      const queried = queryTurns(store, { from: fromDay, to: toDay, all: true });
+      const rows = Array.isArray(queried?.rows) ? queried.rows : [];
+
+      const priceTable = loadPriceTable(ctx.dataDir || "");
+      const buckets = bucketTurns(rows);
+      const result = reconcile({
+        officialRows: spend.rows,
+        buckets,
+        start,
+        end,
+        costOf: (provider, model, mv) => {
+          const price = resolvePriceEntry(priceTable, provider, model);
+          // 查不到价就是查不到：返回 null，让上层标缺价，不用 0 充数。
+          if (!price) return { cost: null, currency: null };
+          return { cost: calcCost(price, mv, 12), currency: price.currency || "USD" };
+        },
+      });
+
+      return c.json({
+        ok: true,
+        range: { start, end, dayCount: span },
+        updatedAt: spend.updatedAt || new Date().toISOString(),
+        currency: "USD",
+        ...result,
+        notes: [
+          "官方按 UTC 切日，本地估算用同一 UTC 窗口重算，不用本机自然日",
+          "官方只给总额，差额只能定位到模型×日，定位不到输入/输出/缓存",
+          "价目表查不到的模型标记缺价，相关合计给 — 而不是 0",
+        ],
+        scannedTurns: rows.length,
+      });
+    } catch (e) {
+      return c.json({ ok: false, code: "request_failed", message: e?.message || "对账计算失败" }, 200);
+    }
+  };
+
   const handleLithosConfig = async (c) => {
     let body = {};
     try { body = await c.req.json(); } catch { body = {}; }
@@ -1209,6 +1280,8 @@ export default function (app, ctx) {
 
   app.get("/dashboard/lithos-spend", handleLithosSpend);
   app.get("/lithos-spend", handleLithosSpend);
+  app.get("/dashboard/lithos-reconcile", handleLithosReconcile);
+  app.get("/lithos-reconcile", handleLithosReconcile);
 
   const handleModelRouting = (c) => {
     const badRequest = () => c.json({ ok: false, error: "模型路由请求参数无效", code: "INVALID_REQUEST" }, 400);
