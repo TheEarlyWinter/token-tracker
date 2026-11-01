@@ -225,6 +225,28 @@ test("candidates expose bounded unresolved archive session ids and skip recent f
   assert.deepEqual(recent.cooling, ["failing"], "五分钟内失败会话必须给出冷却状态");
 });
 
+test("fresh unmapped sessions are preferred over cooling-expired retry sessions", async (t) => {
+  const dir = tempDir();
+  const engine = open(dir);
+  t.after(() => { engine.close(); try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} });
+
+  await engine.scan([
+    entry("r1", { sessionId: "failing-old", startedAt: "2026-09-01T09:00:00.000Z" }),
+  ], { sourceResolution: { capability: "ready", failedSessionIds: ["failing-old"] } });
+
+  await engine.scan([
+    entry("r2", { sessionId: "fresh-new", startedAt: "2026-10-06T10:00:00.000Z" }),
+  ], {});
+
+  const candidate1 = engine.sessionCandidates({ limit: 1 });
+  assert.deepEqual(candidate1.sessionIds, ["fresh-new"], "未尝试过的会话必须优先于失败重试会话");
+
+  // 模拟 5 分钟冷却到期
+  engine.sourceStore.failedRecently("failing-old", Date.now() + 6 * 60 * 1000);
+  const candidate2 = engine.sessionCandidates({ limit: 10 });
+  assert.deepEqual(candidate2.sessionIds, ["fresh-new", "failing-old"], "冷却到期后重试会话排在未尝试会话之后");
+});
+
 test("rpc scan accepts only safe session ids and exposes bounded candidates", async (t) => {
   const dir = tempDir();
   const engine = open(dir);

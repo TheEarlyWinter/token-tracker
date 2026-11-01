@@ -700,7 +700,8 @@ export class LedgerEngine {
         cooling.push(sessionId);
       }
     }
-    const totals = new Map();
+    const freshTotals = new Map();
+    const retryTotals = new Map();
     for (const record of Object.values(this.archiveStore.entries)) {
       const sessionId = this.validSessionId(record?.sessionId);
       if (!sessionId) continue;
@@ -708,14 +709,16 @@ export class LedgerEngine {
       if (this.sourceStore.has(sessionId)) continue;
       if (this.sourceStore.failedRecently(sessionId, now)) continue;
       const ts = record.startedAt || record.endedAt || "";
-      const previous = totals.get(sessionId);
-      if (previous === undefined || ts < previous) totals.set(sessionId, ts);
+      const isRetry = typeof this.sourceStore.hasFailed === "function" && this.sourceStore.hasFailed(sessionId);
+      const targetMap = isRetry ? retryTotals : freshTotals;
+      const previous = targetMap.get(sessionId);
+      if (previous === undefined || ts < previous) targetMap.set(sessionId, ts);
     }
-    // 历史优先最老且不在冷却中的会话，避免新会话持续到来时饥饿；recent 已在排序/截断前排除。
-    const sessionIds = [...totals.entries()]
-      .sort((a, b) => a[1].localeCompare(b[1]))
-      .slice(0, max)
-      .map(([sessionId]) => sessionId);
+    // 未尝试过的会话（fresh）享有最高历史优先级；曾经失败过但冷却期已过的会话（retry）排在后面。
+    // 两组内部均按最老优先排序，完全保持原有的历史回溯稳定性。
+    const freshSorted = [...freshTotals.entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([s]) => s);
+    const retrySorted = [...retryTotals.entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([s]) => s);
+    const sessionIds = [...freshSorted, ...retrySorted].slice(0, max);
     return { sessionIds, known, cooling };
   }
 
@@ -772,20 +775,37 @@ export class LedgerEngine {
     }
   }
 
-  // 直读官方账本是否可用：只探一下（命中指纹时就是一次 stat），不返回条目本身。
+  // 直读官方账本是否可用：只探一下（命中指纹时就是一次 stat），附带最近活跃条目的轻量投影用于来源识别。
   ledgerProbe() {
-    if (!this.homeDir) return { available: false, mode: "none", path: null, count: 0, error: "NO_HANA_HOME" };
+    if (!this.homeDir) return { available: false, mode: "none", path: null, count: 0, recentEntries: [], error: "NO_HANA_HOME" };
     try {
       const loaded = loadLedger(this.homeDir, this.log);
+      const available = loaded.sourceMode !== "none" && loaded.entries.length > 0;
+      const recentEntries = [];
+      if (available) {
+        const seen = new Set();
+        for (let i = loaded.entries.length - 1; i >= 0 && recentEntries.length < MAX_SOURCE_ENTRIES; i--) {
+          const e = loaded.entries[i];
+          const sid = this.validSessionId(e?.attribution?.sessionId);
+          if (sid && !seen.has(sid)) {
+            seen.add(sid);
+            recentEntries.push({
+              attribution: { sessionId: sid },
+              startedAt: typeof e?.startedAt === "string" ? e.startedAt : "",
+            });
+          }
+        }
+      }
       return {
-        available: loaded.sourceMode !== "none" && loaded.entries.length > 0,
+        available,
         mode: loaded.sourceMode,
         path: loaded.sourcePath,
         count: loaded.entries.length,
+        recentEntries,
         error: loaded.error || null,
       };
     } catch (error) {
-      return { available: false, mode: "none", path: null, count: 0, error: error?.code || error?.message || "UNKNOWN" };
+      return { available: false, mode: "none", path: null, count: 0, recentEntries: [], error: error?.code || error?.message || "UNKNOWN" };
     }
   }
 

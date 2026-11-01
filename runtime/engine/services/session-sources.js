@@ -36,6 +36,7 @@ export function openSessionSourceStore({ file, log = null } = {}) {
   log = asLog(log);
   const sources = new Map();
   const failures = new Map();
+  const failedHistory = new Set();
   let capability = null;
   let updatedAt = null;
   let dirty = false;
@@ -60,7 +61,10 @@ export function openSessionSourceStore({ file, log = null } = {}) {
     for (const [id, ts] of Object.entries(parsed.failures || {})) {
       const key = safeId(id);
       const time = Number(ts);
-      if (key && Number.isFinite(time)) failures.set(key, time);
+      if (key && Number.isFinite(time)) {
+        failures.set(key, time);
+        failedHistory.add(key);
+      }
     }
     if (typeof parsed.capability === "string") capability = parsed.capability;
     if (typeof parsed.updatedAt === "string") updatedAt = parsed.updatedAt;
@@ -84,10 +88,12 @@ export function openSessionSourceStore({ file, log = null } = {}) {
     if (!key || !value) return false;
     if (sources.get(key) === value) {
       failures.delete(key);
+      failedHistory.delete(key);
       return false;
     }
     sources.set(key, value);
     failures.delete(key);
+    failedHistory.delete(key);
     dirty = true;
     return true;
   }
@@ -97,6 +103,7 @@ export function openSessionSourceStore({ file, log = null } = {}) {
     if (!key || sources.has(key)) return false;
     const time = Number.isFinite(timestamp) ? timestamp : Date.now();
     failures.set(key, time);
+    failedHistory.add(key);
     dirty = true;
     return true;
   }
@@ -112,6 +119,11 @@ export function openSessionSourceStore({ file, log = null } = {}) {
       return false;
     }
     return true;
+  }
+
+  function hasFailed(sessionId) {
+    const key = safeId(sessionId);
+    return !!key && failedHistory.has(key);
   }
 
   function setCapability(value) {
@@ -145,6 +157,7 @@ export function openSessionSourceStore({ file, log = null } = {}) {
     set,
     fail,
     failedRecently,
+    hasFailed,
     setCapability,
     get capability() { return capability; },
     get pending() { return dirty; },

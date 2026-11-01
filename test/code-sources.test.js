@@ -244,6 +244,43 @@ test("scheduler passes classification to the engine and survives classification 
   assert.deepEqual(scanned.at(-1).sessionNamespaces, {});
 });
 
+test("scheduler forwards recentEntries from local ledger probe to source resolver and passes null to scan", async () => {
+  let resolvedEntries = null;
+  const scannedCalls = [];
+  const shared = makeShared();
+  const recentEntry = { attribution: { sessionId: "code-local-sess" }, startedAt: "2026-10-06T12:00:00.000Z" };
+  const client = {
+    async probeLedger() {
+      return { available: true, count: 50, recentEntries: [recentEntry], mode: "sqlite", path: "/tmp/ledger.sqlite" };
+    },
+    async scan(entries, options) {
+      scannedCalls.push({ entries, options });
+      return { coverageLimitReached: false, usageQueryError: null, sourceAckSessionIds: ["code-local-sess"] };
+    },
+    async readSnapshot() {
+      return { sessions: {}, lastScan: "2026-10-06T12:00:00.000Z" };
+    },
+  };
+  const sdk = { usage: { async list() { throw new Error("should not call host usage.list in local ledger mode"); } } };
+  const resolver = {
+    async resolve(entries) {
+      resolvedEntries = entries;
+      return { sessionNamespaces: { "code-local-sess": "code" }, sourceResolution: { capability: "ready", failedSessionIds: [] } };
+    },
+    ack() {},
+    async dispose() {},
+  };
+
+  const scheduler = createSyncScheduler({ shared, client, sdk, interval: 60000, sourceResolver: resolver });
+  await scheduler.performScan(false);
+
+  assert.deepEqual(resolvedEntries, [recentEntry], "调度器必须把 probe 的 recentEntries 传递给解析器");
+  assert.equal(scannedCalls.length, 1);
+  assert.equal(scannedCalls[0].entries, null, "localLedger 为 true 时 scan 接收 null entries");
+  assert.equal(scannedCalls[0].options.localLedger, true);
+  assert.deepEqual(scannedCalls[0].options.sessionNamespaces, { "code-local-sess": "code" });
+});
+
 function makeShared() {
   return { agentNames: {}, health: { set() {} }, log: quiet, data: null, ready: false, scanMeta: null };
 }
@@ -535,4 +572,59 @@ test("engine cooling expires inside one resolver process instead of blocking for
   const out = await resolver.resolve(entries);
   assert.equal(queries, 1, "同一个 resolver 进程内冷却到期后必须重新查询");
   assert.deepEqual(out.sessionNamespaces, { "cool-session": "code" });
+});
+
+test("end-to-end: local ledger mode resolves active code session and classifies into code bucket", async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tracker-e2e-"));
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "tracker-e2e-home-"));
+  const unclassifiedEntry = entry("code-active-sess", "req-1", "2026-10-06T10:00:00.000Z");
+  fs.writeFileSync(path.join(home, "usage-ledger.json"), JSON.stringify({ entries: [unclassifiedEntry] }));
+
+  const engine = createLedgerEngine({ dataDir: dir, homeDir: home, log: quiet });
+  t.after(() => {
+    engine.close();
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(home, { recursive: true, force: true }); } catch {}
+  });
+
+  await engine.scan([unclassifiedEntry], {});
+  assert.ok(engine.getData().sessions["agent-a::desktop::2026-10-06"], "首次未分类前落入 desktop 桶");
+  assert.equal(engine.getData().sessions["agent-a::code::2026-10-06"], undefined);
+
+  const sdk = fakeSdk(async ({ sessionId }) => {
+    return { session: { id: sessionId, namespace: sessionId === "code-active-sess" ? "code" : "home" } };
+  });
+  const client = {
+    async probeLedger() {
+      return {
+        available: true,
+        count: 1,
+        mode: "json",
+        path: path.join(home, "usage-ledger.json"),
+        recentEntries: [{ attribution: { sessionId: "code-active-sess" }, startedAt: "2026-10-06T10:00:00.000Z" }],
+      };
+    },
+    async call(method, payload) {
+      if (method === "sessions.candidates") return engine.sessionCandidates(payload);
+      throw new Error(`unknown client call: ${method}`);
+    },
+    async scan(entries, options) {
+      return engine.scan(entries, options);
+    },
+    async readSnapshot() {
+      return engine.getData();
+    },
+  };
+
+  const shared = makeShared();
+  const resolver = createSessionSourceResolver({ sdk, client, log: quiet });
+  const scheduler = createSyncScheduler({ shared, client, sdk, interval: 60000, sourceResolver: resolver });
+
+  await scheduler.performScan(false);
+
+  const data = engine.getData();
+  assert.equal(data.sessions["agent-a::desktop::2026-10-06"], undefined, "旧 desktop 桶必须被撤销");
+  assert.ok(data.sessions["agent-a::code::2026-10-06"], "Code 桶必须已建立");
+  assert.equal(data.sessions["agent-a::code::2026-10-06"].totalTokens, 10, "Code 桶成功继承 10 tokens");
+  assert.equal(shared.data.sessions["agent-a::code::2026-10-06"].totalTokens, 10, "调度器共享快照同步更新");
 });
