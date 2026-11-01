@@ -18,6 +18,7 @@ import { LithosBalanceService, looseCookieValues, monthToDateUtc } from "../lib/
 import { bucketTurns, dayCount, isIsoDay, reconcile, shiftIsoDay } from "../lib/reconcile.mjs";
 import { DeepSeekUsageService } from "../lib/deepseek-usage.mjs";
 import { GeminiQuotaService } from "../lib/gemini-quota.mjs";
+import { OpenCodeQuotaService } from "../lib/opencode-quota.mjs";
 import { writeFileAtomic } from "../runtime/engine/services/jsonl-log.js";
 import { deriveHanaHome } from "../lib/local-client.mjs";
 const MANIFEST = JSON.parse(fs.readFileSync(new URL('../manifest.json', import.meta.url), 'utf8'));
@@ -298,6 +299,17 @@ export default function (app, ctx) {
     timeoutMs: 12_000,
   });
 
+  // OpenCode Go 订阅用量：官方只给百分比窗口（rolling/weekly/monthly），
+  // Key 优先用宿主 opencode-go 供应商的推理 Key，也能在设置里单独填。
+  const opencodeQuotaService = new OpenCodeQuotaService({
+    bus: ctx.bus,
+    network: ctx.network,
+    fetchFn: globalThis.fetch,
+    dataDir: ctx.dataDir || "",
+    ttlMs: 60_000,
+    timeoutMs: 8_000,
+  });
+
   // 数据接口处理器
   const handleData = async (c) => {
     try {
@@ -555,6 +567,31 @@ export default function (app, ctx) {
         result.codexQuota = { connected: false, reason: "error", message: "Codex 额度读取异常" };
       }
 
+      // 顶栏「订阅余量」与用量页底部配额区共用 _subscriptionQuotas。
+      // 这里只放官方口径：OpenCode Go 给百分比窗口，不给美元；
+      // 未配置或查询失败就不占位，免得把「没配」画成「用了 0」。
+      result._subscriptionQuotas = [];
+      try {
+        const og = await opencodeQuotaService.getQuota();
+        if (og?.connected && Array.isArray(og.windows) && og.windows.length) {
+          result._subscriptionQuotas.push({
+            type: "opencode-go-quota",
+            label: "OpenCode Go",
+            est: false,
+            windows: og.windows.map((w) => ({
+              level: w.level,
+              usedPercent: w.usedPercent,
+              remainingPercent: w.remainingPercent,
+              resetInSec: w.resetInSec,
+              resetsAt: w.resetsAt,
+              known: w.known,
+            })),
+          });
+        }
+      } catch {
+        // 额度是附加信息，取不到不能拖垮主用量页面
+      }
+
       return c.json(result);
     } catch (e) {
       return c.json({ error: e.message || "请求处理异常", code: "INTERNAL_ERROR" }, 500);
@@ -570,6 +607,50 @@ export default function (app, ctx) {
     } catch (e) {
       return c.json({ connected: false, reason: "error", message: e.message || "Codex 额度查询失败" }, 200);
     }
+  };
+
+  // OpenCode Go 用量：GET 查，POST 存/清 Key（存完立刻验一次，粘完就能看到结果）。
+  const handleOpenCodeQuota = async (c) => {
+    try {
+      const force = c.req.query("force") === "1" || c.req.query("refresh") === "1";
+      const quota = await opencodeQuotaService.getQuota({ force });
+      return c.json({ ...quota, config: opencodeQuotaService.describeConfig() });
+    } catch (e) {
+      return c.json({
+        connected: false,
+        reason: "error",
+        message: e.message || "OpenCode 用量查询失败",
+        windows: [],
+      }, 200);
+    }
+  };
+
+  const handleOpenCodeQuotaConfig = async (c) => {
+    let body = {};
+    try { body = await c.req.json(); } catch { body = {}; }
+    const hasKey = typeof body?.apiKey === "string" && body.apiKey.trim() !== "";
+    const action = body?.action || (hasKey ? "save" : "status");
+
+    if (action === "clear") {
+      const cleared = await opencodeQuotaService.clearApiKey();
+      if (!cleared.ok) return c.json(cleared, 400);
+      return c.json({ ...cleared, config: opencodeQuotaService.describeConfig() });
+    }
+    if (action === "save") {
+      const saved = await opencodeQuotaService.saveApiKey(body.apiKey);
+      if (!saved.ok) {
+        return c.json({ ...saved, config: opencodeQuotaService.describeConfig() }, 400);
+      }
+      // 存完立刻查一次：Key 错、没订阅这两种情况当场就能看出来，
+      // 不用等下一轮刷新去猜「为什么还是空」。
+      const quota = await opencodeQuotaService.getQuota({ force: true });
+      return c.json({ ...saved, quota, config: opencodeQuotaService.describeConfig() });
+    }
+    return c.json({
+      ok: true,
+      ...opencodeQuotaService.describeConfig(),
+      quota: await opencodeQuotaService.getQuota(),
+    });
   };
 
   const handleCodexResetCredits = async (c) => {
@@ -1277,6 +1358,11 @@ export default function (app, ctx) {
   app.get("/codex-reset-credits", handleCodexResetCredits);
   app.post("/dashboard/codex-reset-credits/consume", handleCodexResetConsume);
   app.post("/codex-reset-credits/consume", handleCodexResetConsume);
+
+  app.get("/dashboard/opencode-quota", handleOpenCodeQuota);
+  app.get("/opencode-quota", handleOpenCodeQuota);
+  app.post("/dashboard/opencode-quota/config", handleOpenCodeQuotaConfig);
+  app.post("/opencode-quota/config", handleOpenCodeQuotaConfig);
 
   app.get("/dashboard/deepseek-balance", handleDeepseekBalance);
   app.get("/deepseek-balance", handleDeepseekBalance);

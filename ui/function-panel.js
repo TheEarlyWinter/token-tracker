@@ -1,5 +1,6 @@
 // ui/function-panel.js — 宿主功能面板 (Function Panel) Codex 额度与 DeepSeek 余额挂载模块
 import { renderCodexQuotaCard } from "./modules/codex-card.js";
+import { renderOpenCodeQuotaCard } from "./modules/opencode-card.js";
 import { renderDeepSeekCard } from "./modules/deepseek-card.js";
 import { renderLithosCard } from "./modules/lithos-card.js";
 import { createGeminiQuotaController } from "./modules/gemini-card.js";
@@ -45,11 +46,12 @@ function updatePanelEmptyNotice() {
   const dsSection = document.getElementById("fp-deepseek-section");
   const lithosSection = document.getElementById("fp-lithos-section");
   const geminiSection = document.getElementById("fp-gemini-section");
+  const ogSection = document.getElementById("fp-opencode-section");
   if (geminiPending) {
     emptyNotice.style.display = "none";
     return;
   }
-  const hasVisibleSection = [codexSection, dsSection, lithosSection, geminiSection]
+  const hasVisibleSection = [codexSection, dsSection, lithosSection, geminiSection, ogSection]
     .some((section) => section && section.style.display !== "none");
   if (hasVisibleSection) {
     emptyNotice.style.display = "none";
@@ -112,6 +114,44 @@ async function fetchCodexQuota(force = false) {
   }
   const res = await fetch(`${getAppApiBase()}/codex-quota${query}`);
   return await res.json();
+}
+
+async function fetchOpenCodeQuota(force = false) {
+  const query = force ? "?refresh=1" : "";
+  if (window.hana?.api?.fetch) {
+    try {
+      const res = await window.hana.api.fetch(`/opencode-quota${query}`);
+      return await res.json();
+    } catch {}
+  }
+  try {
+    const res = await fetch(`${getAppApiBase()}/opencode-quota${query}`);
+    return await res.json();
+  } catch {
+    return { connected: false, reason: "network_error", message: "网络请求失败", windows: [] };
+  }
+}
+
+async function saveOpenCodeKey(apiKey) {
+  const init = {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ apiKey }),
+  };
+  if (window.hana?.api?.fetch) {
+    try {
+      const res = await window.hana.api.fetch("/opencode-quota/config", init);
+      return await res.json();
+    } catch (e) {
+      return { ok: false, message: e.message || "请求失败" };
+    }
+  }
+  try {
+    const res = await fetch(`${getAppApiBase()}/opencode-quota/config`, init);
+    return await res.json();
+  } catch (e) {
+    return { ok: false, message: e.message || "请求失败" };
+  }
 }
 
 export async function fetchResetCredits(force = false) {
@@ -182,6 +222,7 @@ export async function loadAndRender(force = false, directSettings = null) {
   const codexSlot = document.getElementById("codex-card-slot");
   const dsSlot = document.getElementById("deepseek-card-slot");
   const lithosSlot = document.getElementById("lithos-card-slot");
+  const ogSlot = document.getElementById("opencode-card-slot");
   const refreshBtn = document.getElementById("fp-refresh");
   if (refreshBtn) refreshBtn.disabled = true;
   void loadGeminiPool();
@@ -223,6 +264,12 @@ export async function loadAndRender(force = false, directSettings = null) {
           .catch(err => ({ type: "deepseek", err }))
       );
     }
+    // OpenCode Go 同样自己决定内容：没配就给填 Key 的入口，不跟着 Codex 开关走。
+    tasks.push(
+      fetchOpenCodeQuota(force)
+        .then(data => ({ type: "opencode", data }))
+        .catch(err => ({ type: "opencode", err }))
+    );
 
     const results = await Promise.all(tasks);
     for (const res of results) {
@@ -281,6 +328,15 @@ export async function loadAndRender(force = false, directSettings = null) {
         // 没数据也算「没配」：卡按 not_configured 处理，自己隐藏
         if (res.data) renderLithosCard(lithosSlot, res.data);
         else renderLithosCard(lithosSlot, { reason: "not_configured" });
+      } else if (res.type === "opencode") {
+        if (res.data) {
+          renderOpenCodeQuotaCard(ogSlot, res.data, {
+            onSaveKey: saveOpenCodeKey,
+            onRefresh: (f) => loadAndRender(f),
+          });
+        } else {
+          renderOpenCodeQuotaCard(ogSlot, { connected: false, reason: "network_error", message: "用量加载失败，请重试" });
+        }
       }
     }
 

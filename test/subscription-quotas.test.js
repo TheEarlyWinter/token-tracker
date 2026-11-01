@@ -58,6 +58,62 @@ test('estimated-only subscription data remains visible when official quota is un
   assert.match(container.innerHTML, /2\.50/);
 });
 
+test('官方百分比窗口不拿硬编码月上限倒推金额', () => {
+  const container = { style: { display: '' }, innerHTML: '' };
+  renderHdrQuota({
+    container,
+    quotas: [{
+      type: 'opencode-go-quota',
+      label: 'OpenCode Go',
+      est: false,
+      windows: [
+        { level: 'rolling', usedPercent: 25, remainingPercent: 75, resetInSec: 1800, known: true },
+        { level: 'monthly', usedPercent: 80, remainingPercent: 20, resetInSec: 86400, known: true },
+      ],
+    }],
+  });
+  // 没有 limitUsd 就不能出现美元金额
+  assert.doesNotMatch(container.innerHTML, /\$/);
+  assert.match(container.innerHTML, /剩余 75%/);
+  assert.match(container.innerHTML, /剩余 20%/);
+
+  // 本地估算真有 usedUsd/limitUsd 时才写金额
+  const estContainer = { style: { display: '' }, innerHTML: '' };
+  renderHdrQuota({
+    container: estContainer,
+    quotas: [{
+      type: 'opencode-go-quota-est',
+      est: true,
+      windows: [{ level: 'rolling', usedUsd: 3, limitUsd: 12 }],
+    }],
+    dual: (v) => '$' + Number(v).toFixed(2),
+  });
+  assert.match(estContainer.innerHTML, /\$9\.00/);
+});
+
+test('官方百分比窗口在没有按模型明细时也要画出三个窗口', () => {
+  const container = { style: { display: 'none' }, innerHTML: '' };
+  renderSubscriptionQuotas({
+    container,
+    quotas: [{
+      type: 'opencode-go-quota',
+      label: 'OpenCode Go',
+      est: false,
+      windows: [
+        { level: 'rolling', usedPercent: 25, resetInSec: 1800, known: true },
+        { level: 'weekly', usedPercent: 62.5, resetInSec: 3600, known: true },
+        { level: 'monthly', usedPercent: null, known: false },
+      ],
+    }],
+  });
+  assert.equal(container.style.display, '');
+  assert.match(container.innerHTML, /官方/);
+  assert.match(container.innerHTML, /5小时/);
+  assert.match(container.innerHTML, /已用 25%/);
+  assert.match(container.innerHTML, /已用 62\.5%/);
+  assert.doesNotMatch(container.innerHTML, /\$/);
+});
+
 test('renderSubscriptionQuotas correctly renders cards and badges', () => {
   const container = { style: { display: '' }, innerHTML: '' };
   const quotas = [

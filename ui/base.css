@@ -625,6 +625,38 @@ button.sb-codex-credit-btn:hover {
   padding: 2px 0;
 }
 
+/* OpenCode Go：未配置时就地填 Key 的那一行 */
+.sb-og-form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.sb-og-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  appearance: none;
+  border: 1px solid var(--card-border, #e4e4e7);
+  border-radius: 4px;
+  background: var(--bg-card, #ffffff);
+  color: var(--text-primary, #18181b);
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  padding: 4px 6px;
+  box-sizing: border-box;
+}
+
+.sb-og-input:focus {
+  outline: none;
+  border-color: var(--text-tertiary, #a1a1aa);
+}
+
+.sb-og-msg {
+  font-size: 10px;
+  min-height: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
 /* 余额卡上的「充值 ↗」：跟徽标同一排，做得比链接显眼、比主按钮安静 */
 .sb-codex-topup {
   appearance: none;
@@ -655,6 +687,10 @@ button.sb-codex-credit-btn:hover {
 [data-hana-theme="obsidian"],
 [data-hana-theme="dark"] {
   .sb-codex-topup {
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+
+  .sb-og-input {
     border-color: rgba(255, 255, 255, 0.14);
   }
 }

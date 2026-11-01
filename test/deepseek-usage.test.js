@@ -264,10 +264,12 @@ test("服务：走按月端点，请求要装成浏览器（否则被 WAF 挡）
     },
   });
   svc.saveToken(TOKEN);
-  const res = await svc.getUsage({ range: "month", force: true });
+  // 把「现在」固定到 fixture 所在月份：range="month" 走的是当月，跟着系统时钟跑会跨月失效。
+  const now = new Date("2026-10-27T08:00:00+08:00");
+  const res = await svc.getUsage({ range: "month", now, force: true });
   assert.equal(res.connected, true);
   assert.equal(res.totalCost, 2.598);
-  assert.ok(urls.some((u) => /\/api\/v0\/usage\/amount\?month=10&year=\d{4}/.test(u)), "按月端点");
+  assert.ok(urls.some((u) => /\/api\/v0\/usage\/amount\?month=10&year=2026/.test(u)), "按月端点");
   assert.match(String(seenHeaders.Authorization), /^Bearer FAKEplatformToken/);
   assert.ok(seenHeaders.Referer, "WAF 会看 Referer");
   assert.ok(seenHeaders["Accept-Language"], "也要 Accept-Language");

@@ -654,23 +654,29 @@ test("ui/theme.css and ui/base.css define Code styling and theme aliases", () =>
   assert.match(baseCss, /\.source-notice/);
 });
 
-// ── 8. 版本与静态入口一致性 7.3.0 ──
-test("Version manifests, entries and static links are unified to 7.3.0", () => {
+// ── 8. 版本与静态入口一致性 ──
+test("Version manifests, entries and static links are unified", () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(rootDir, "manifest.json"), "utf-8"));
   const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, "package.json"), "utf-8"));
   const indexHtml = fs.readFileSync(path.join(rootDir, "ui/index.html"), "utf-8");
-  const v730HtmlPath = path.join(rootDir, "ui/dashboard-v7.3.0.html");
   const fnPanelHtml = fs.readFileSync(path.join(rootDir, "ui/function-panel.html"), "utf-8");
+  // 版本号只从 manifest 一处取：这样校的是「各入口有没有跟上这一次 bump」，
+  // 而不是每次发版都得回来改这份测试里的字面量。
+  const version = manifest.version;
 
-  assert.equal(manifest.version, "7.3.0", "manifest.json 版本必须为 7.3.0");
-  assert.equal(pkg.version, "7.3.0", "package.json 版本必须为 7.3.0");
-  assert.equal(manifest.contributes.cards[0].route, "/dashboard-v7.3.0.html", "主卡入口必须指向 dashboard-v7.3.0.html");
+  assert.equal(pkg.version, version, "package.json 与 manifest.json 版本必须一致");
+  assert.match(version, /^\d+\.\d+\.\d+$/, "版本号必须是 x.y.z");
+  assert.equal(
+    manifest.contributes.cards[0].route,
+    `/dashboard-v${version}.html`,
+    "主卡入口必须指向当前版本的 dashboard-v<version>.html"
+  );
 
-  assert.ok(fs.existsSync(v730HtmlPath), "ui/dashboard-v7.3.0.html 必须存在");
-  const v730Html = fs.readFileSync(v730HtmlPath, "utf-8");
-  assert.equal(v730Html, indexHtml, "dashboard-v7.3.0.html 内容必须与 ui/index.html 严格一致");
-  assert.match(indexHtml, /data-ui-version="7\.3\.0"/, "ui/index.html 必须标记 7.3.0");
-  assert.match(fnPanelHtml, /v7\.3\.0/, "ui/function-panel.html 必须展示 v7.3.0");
+  const entryHtmlPath = path.join(rootDir, "ui", `dashboard-v${version}.html`);
+  assert.ok(fs.existsSync(entryHtmlPath), `ui/dashboard-v${version}.html 必须存在`);
+  assert.equal(fs.readFileSync(entryHtmlPath, "utf-8"), indexHtml, "版本入口内容必须与 ui/index.html 严格一致");
+  assert.ok(indexHtml.includes(`data-ui-version="${version}"`), "ui/index.html 必须标记当前版本");
+  assert.ok(fnPanelHtml.includes(`v${version}`), "ui/function-panel.html 必须展示当前版本");
 
   // 历史入口保留，旧版本链接不能断。
   assert.ok(fs.existsSync(path.join(rootDir, "ui/dashboard-v7.2.1.html")), "ui/dashboard-v7.2.1.html 必须保留");

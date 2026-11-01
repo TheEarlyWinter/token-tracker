@@ -1,0 +1,5 @@
+# 统一用 LF 存储与检出。
+# 宿主与 CI 都在 Linux/macOS；Windows 上 core.autocrlf=true 会把工作区改成 CRLF，
+# 让按行切片的测试（如 test/dashboard-ux.test.js 的 extract）误判函数边界而报语法错误。
+# 这里显式覆盖 core.autocrlf，二进制文件由 text=auto 自动识别，不受影响。
+* text=auto eol=lf

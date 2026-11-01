@@ -40,6 +40,8 @@ export function quotaColor(p) {
   return "var(--green)";
 }
 
+// 顶栏那条「订阅余量」已按使用反馈下线（用户要求不要放在用量标题旁边），
+// 现在配额只在功能面板与用量页底部区块展示。函数保留备复用。
 export function renderHdrQuota({
   container,
   quotas = [],
@@ -73,11 +75,17 @@ export function renderHdrQuota({
     const remainUsd = og.est
       ? Math.max(0, limitUsd - (win.usedUsd || 0))
       : Math.max(0, (limitUsd * (100 - p)) / 100);
+    // 官方端点只给百分比，没有美元字段。只有本地估算（est）或确实给了 limitUsd 时
+    // 才敢把主数字写成金额；否则就写剩下多少百分比——不拿硬编码的月上限倒推一个「官方金额」。
+    const moneyKnown = og.est || (typeof win.limitUsd === "number" && win.limitUsd > 0);
     const c = quotaColor(p);
     const amtCls = p >= 80 ? " hq-urgent" : (p >= 60 ? " hq-warn" : "");
+    const primary = moneyKnown
+      ? '<b class="' + amtCls + '" style="color:' + c + '">' + dual(remainUsd) + '</b>'
+      : '<b class="' + amtCls + '" style="color:' + c + '">剩余 ' + remainPctStr + '%</b>';
     const resetTxt = og.est ? "估算" : fmtReset(win.resetInSec);
 
-    h += '<div class="hq-win"><span class="hq-wl">' + escHTML(winNames[win.level] || win.level) + '</span><b class="' + amtCls + '" style="color:' + c + '">' + dual(remainUsd) + '</b><div class="hq-track"><i style="width:' + p + '%;background:' + c + '"></i></div><i class="hq-note">剩余 ' + remainPctStr + '%<em class="hq-reset"><svg class="hq-hg" viewBox="0 0 12 16" aria-hidden="true"><path d="M2 1h8v2L6.5 8l3.5 5v2H2v-2l3.5-5L2 3V1z" fill="none" stroke="currentColor"/><path class="hg-sand-top" d="M3 2.1h6L6 7.5 3 2.1z" fill="currentColor"/><path class="hg-sand-bot" d="M6 8.5l3 5.4H3l3-5.4z" fill="currentColor" opacity=".45"/></svg>' + resetTxt + '</em></i></div>';
+    h += '<div class="hq-win"><span class="hq-wl">' + escHTML(winNames[win.level] || win.level) + '</span>' + primary + '<div class="hq-track"><i style="width:' + p + '%;background:' + c + '"></i></div><i class="hq-note">剩余 ' + remainPctStr + '%<em class="hq-reset"><svg class="hq-hg" viewBox="0 0 12 16" aria-hidden="true"><path d="M2 1h8v2L6.5 8l3.5 5v2H2v-2l3.5-5L2 3V1z" fill="none" stroke="currentColor"/><path class="hg-sand-top" d="M3 2.1h6L6 7.5 3 2.1z" fill="currentColor"/><path class="hg-sand-bot" d="M6 8.5l3 5.4H3l3-5.4z" fill="currentColor" opacity=".45"/></svg>' + resetTxt + '</em></i></div>';
   }
   h += '</div>';
   container.innerHTML = h;
@@ -115,6 +123,26 @@ export function renderSubscriptionQuotas({
     if (isOg && q.windows && q.windows.length) {
       let uh = '';
       const ogUsageSrc = q.monthlyModelUsage || [];
+      const hasModelUsage = ogUsageSrc.length > 0;
+      const hasKeySummary = !!(q.keySummary && q.keySummary.length);
+      // 官方端点只给 rolling/weekly/monthly 的百分比，既没有按模型额度也没有收藏 Key 明细。
+      // 那种情况下直接画三个窗口，不能交一张只有标题的空卡。
+      if (!hasModelUsage && !hasKeySummary) {
+        const winLabels = { rolling: "5小时", weekly: "本周", monthly: "本月" };
+        for (let wi = 0; wi < q.windows.length; wi++) {
+          const win = q.windows[wi];
+          if (!win || win.known === false || typeof win.usedPercent !== "number") {
+            uh += '<div class="subq-row"><div class="subq-lbl">' + escHTML(winLabels[win?.level] || win?.level || "窗口") + '</div><div class="subq-bar"></div><div class="subq-pct">—</div></div>';
+            continue;
+          }
+          const used = Math.min(100, Math.max(0, win.usedPercent));
+          const c = quotaColor(used);
+          const resetTxt = typeof win.resetInSec === "number" ? fmtReset(win.resetInSec) : "";
+          uh += '<div class="subq-row"><div class="subq-lbl">' + escHTML(winLabels[win.level] || win.level) + '</div>' +
+            '<div class="subq-bar"><div class="subq-bar-fill" style="width:' + used + '%;background:' + c + '"></div></div>' +
+            '<div class="subq-pct" style="color:' + c + '">已用 ' + (used % 1 === 0 ? used.toFixed(0) : used.toFixed(1)) + '%' + (resetTxt ? ' · ' + resetTxt : '') + '</div></div>';
+        }
+      }
       if (ogUsageSrc && ogUsageSrc.length) {
         const allowRows = [];
         for (let oai = 0; oai < ogUsageSrc.length; oai++) {

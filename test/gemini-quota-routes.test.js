@@ -156,8 +156,9 @@ test("Gemini 配置路由透传 baseUrl：非法地址 400，未传时沿用已�
 
 test("manifest 与忽略规则只增加固定 CPA 主机和 gemini-cpa.json", () => {
   const manifest = JSON.parse(fs.readFileSync(new URL("../manifest.json", import.meta.url), "utf8"));
+  const pkg = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
   assert.ok(manifest.network.allowedHosts.includes("cpa.example.invalid"));
-  assert.equal(manifest.version, "7.3.0");
+  assert.equal(manifest.version, pkg.version, "manifest 与 package 版本必须一致");
   const ignore = fs.readFileSync(new URL("../.gitignore", import.meta.url), "utf8");
   assert.match(ignore, /^gemini-cpa\.json$/m);
 });

@@ -528,6 +528,9 @@ function loadFunctionPanelHarness() {
     if (endpoint.startsWith("/deepseek-balance")) {
       return makeResponse({ connected: false });
     }
+    if (endpoint.startsWith("/opencode-quota")) {
+      return makeResponse({ connected: false, reason: "not_configured", windows: [] });
+    }
     throw new Error(`unexpected endpoint ${endpoint}`);
   };
 
@@ -552,6 +555,7 @@ function loadFunctionPanelHarness() {
     renderCodexQuotaCard: (container, data, handlers) => rendered.push({ container, data, handlers }),
     renderDeepSeekCard: () => {},
     renderLithosCard: () => {},
+    renderOpenCodeQuotaCard: () => {},
   };
   vm.runInNewContext(source, context, { filename: sourcePath });
   return {

@@ -12,7 +12,6 @@ import { renderHeadlineCards } from "./modules/headline-cards.js";
 import { initFilterDropdowns } from "./modules/filter-dropdown.js";
 import {
   renderSubscriptionQuotas as renderSubQuotas,
-  renderHdrQuota as renderHeaderQuota,
 } from "./modules/subscription-quotas.js";
 import { renderMediaSection as renderMedia } from "./modules/media-section.js";
 import { createAgentAnalytics } from "./modules/agent-analytics.js";
@@ -379,7 +378,7 @@ $("app").innerHTML =
   '</div>'+
   '<div class="main-area">'+
   '<div class="archive-intro"><span>PERSONAL USAGE ARCHIVE / 01</span><p>把每一次调用，放回工作流里看。</p></div>'+
-  '<div class="hdr"><div class="hdr-left"><span class="hdr-title">用量</span><span id="lu">—</span></div><div id="hdrQuota" class="hdr-quota"></div><div class="hdr-right"><button class="btn-icon" id="rf" title="刷新数据"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button><button class="btn-icon" id="th-btn" title="切换深色模式"></button><button class="btn-icon" id="st-btn" title="设置"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button><span class="unit-hint" id="uh">ⓘ</span></div></div>'+
+  '<div class="hdr"><div class="hdr-left"><span class="hdr-title">用量</span><span id="lu">—</span></div><div class="hdr-right"><button class="btn-icon" id="rf" title="刷新数据"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button><button class="btn-icon" id="th-btn" title="切换深色模式"></button><button class="btn-icon" id="st-btn" title="设置"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button><span class="unit-hint" id="uh">ⓘ</span></div></div>'+
   '<div class="view-tabs" id="view-tabs"><button type="button" class="vt on" data-view="usage">用量</button><button type="button" class="vt" data-view="turns">调用明细</button><button type="button" class="vt" data-view="lithos">LithosAI 消费</button><button type="button" class="vt" data-view="ds-usage">DeepSeek 官方用量</button><button type="button" class="vt" data-view="reconcile">对账</button><button type="button" class="vt" data-view="model-routing">模型路由</button></div>'+
   '<div id="usage-view">'+
   '<details id="runtime-health" class="runtime-health"><summary id="health-summary">运行状态 · 尚未取得检查结果</summary><div id="health-details"></div><details class="metric-help"><summary>指标与采集范围说明</summary><p>首响：请求发出至 provider 响应元数据到达，不是真正的首 token TTFT。</p><p>速度：输出 token ÷ 完整请求时长，包含等待；优先实时请求计量，无有效实时样本时使用同模型最近 8 条有效账本时长回退，不是流式瞬时速度。</p><p>胶囊缓存率：本会话当前模型最近 50 条记录，按 token 体量加权；看板缓存率维持缓存读 token ÷ 当前筛选范围总 token 的既有口径。</p><p>费用为估算，与供应商账单可能不同。余额查询时间不代表用量同步时间。</p><p id="coverage-help"></p></details><details class="diagnostic-preview"><summary>查看诊断摘要</summary><pre id="diagnostic-text"></pre><button class="btn" id="copy-diagnostic">复制诊断摘要</button><span id="copy-result" role="status"></span><p>仅复制已预览的摘要，不会自动上传。</p></details></details>'+
@@ -393,7 +392,6 @@ $("app").innerHTML =
   '<div class="cx"><div class="ct">Agent 消耗对比</div><canvas id="ac"></canvas></div></div>'+
   '</div></div>'+
   '<div id="agent-analytics-section"></div>'+
-  '<div id="sub-quota-section" style="display:none"></div>'+
   '</div>'+  // #usage-view 结束
   '<div id="turns-view" class="turns-view" style="display:none"><div id="turns-inspector-section"></div></div>'+
   '<div id="lithos-spend-section" class="lithos-spend-section" style="display:none"></div>'+
@@ -519,7 +517,6 @@ function renderSourceNotice() {
 function render() {
   if (!D) return;
   updateFilterOpts();
-  renderHdrQuota();
   renderStatus();
   renderSourceNotice();
   // 汇率标注（双币显示时展示换算依据）
@@ -861,6 +858,8 @@ function renderAgent() {
   }
 }
 
+// 用量页底部原有一块「订阅余量」，已按使用反馈下线：配额只留在功能面板一处。
+// 函数保留是因为渲染循环与 refreshQuota 仍会调到它；容器不在时直接返回。
 function renderSubscriptionQuotas(){
   renderSubQuotas({
     container: $("sub-quota-section"),
@@ -868,15 +867,6 @@ function renderSubscriptionQuotas(){
     priceTable: D ? D._priceTable : {},
     escHTML: escHTML,
     fmt: fmt,
-  });
-}
-
-function renderHdrQuota(){
-  renderHeaderQuota({
-    container: $("hdrQuota"),
-    quotas: D ? D._subscriptionQuotas : [],
-    escHTML: escHTML,
-    dual: dual,
   });
 }
 
@@ -1052,7 +1042,6 @@ function refreshQuota() {
       var oq = D._subscriptionQuotas || [];
       if (JSON.stringify(nq) === JSON.stringify(oq)) return;
       D._subscriptionQuotas = nq;
-      renderHdrQuota();
       renderSubscriptionQuotas();
       try {
         var bc = getQuotaBroadcastChannel();
